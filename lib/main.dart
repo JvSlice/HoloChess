@@ -27,8 +27,12 @@ class DejairkApp extends StatelessWidget {
 }
 
 enum PlayerSide { cyan, red }
+
 enum UnitType { core, lancer, blinker }
+
 enum Difficulty { easy, medium, hard }
+
+enum GameMode { vsAI, local }
 
 extension PlayerSideX on PlayerSide {
   PlayerSide get opponent =>
@@ -71,6 +75,17 @@ extension DifficultyX on Difficulty {
         return 0.14;
       case Difficulty.hard:
         return 0.05;
+    }
+  }
+}
+
+extension GameModeX on GameMode {
+  String get label {
+    switch (this) {
+      case GameMode.vsAI:
+        return 'VS AI';
+      case GameMode.local:
+        return 'Local 2P';
     }
   }
 }
@@ -189,7 +204,7 @@ class GameState {
       redScore: 0,
       gameOver: false,
       winner: null,
-      status: 'Your turn',
+      status: 'Cyan to move',
     );
   }
 
@@ -384,7 +399,7 @@ class Rules {
       return true;
     }
 
-    state.status = state.turn == PlayerSide.cyan ? 'Your turn' : 'AI thinking...';
+    state.status = '${state.turn.label} to move';
     return true;
   }
 }
@@ -532,6 +547,9 @@ class GamePage extends StatefulWidget {
 class _GamePageState extends State<GamePage> {
   late GameState state;
   Difficulty difficulty = Difficulty.medium;
+  GameMode mode = GameMode.vsAI;
+  bool useRoundBoard = true;
+
   BoardPos? selected;
   List<GameMove> selectedMoves = [];
   bool aiBusy = false;
@@ -541,6 +559,9 @@ class _GamePageState extends State<GamePage> {
     super.initState();
     state = GameState.initial();
   }
+
+  bool get isCompact => MediaQuery.of(context).size.width < 700;
+  bool get isWide => MediaQuery.of(context).size.width >= 950;
 
   void restartGame() {
     setState(() {
@@ -558,13 +579,25 @@ class _GamePageState extends State<GamePage> {
     });
   }
 
+  void setMode(GameMode newMode) {
+    setState(() {
+      mode = newMode;
+      restartGame();
+    });
+  }
+
+  void setBoardStyle(bool round) {
+    setState(() {
+      useRoundBoard = round;
+    });
+  }
+
   void handleTap(BoardPos pos) {
     if (state.gameOver || aiBusy) return;
-    if (state.turn != PlayerSide.cyan) return;
 
     final piece = state.at(pos);
 
-    if (piece != null && piece.side == PlayerSide.cyan) {
+    if (piece != null && piece.side == state.turn) {
       setState(() {
         selected = pos;
         selectedMoves = Rules.movesForPiece(state, pos);
@@ -574,6 +607,7 @@ class _GamePageState extends State<GamePage> {
 
     if (selected != null) {
       final matchingMove = selectedMoves.where((m) => m.to == pos).toList();
+
       if (matchingMove.isNotEmpty) {
         setState(() {
           Rules.applyMove(state, matchingMove.first);
@@ -581,7 +615,7 @@ class _GamePageState extends State<GamePage> {
           selectedMoves = [];
         });
 
-        if (!state.gameOver) {
+        if (!state.gameOver && mode == GameMode.vsAI && state.turn == PlayerSide.red) {
           _runAiTurn();
         }
       } else {
@@ -636,20 +670,26 @@ class _GamePageState extends State<GamePage> {
         return AlertDialog(
           backgroundColor: const Color(0xFF0B1623),
           title: const Text('How to Play'),
-          content: const SingleChildScrollView(
+          content: SingleChildScrollView(
             child: Text(
               'Goal:\n'
               'Capture the enemy Core, or leave the opponent with no legal moves.\n\n'
+              'Modes:\n'
+              '• VS AI: play as Cyan against Red AI\n'
+              '• Local 2P: both players use the same device\n\n'
               'Pieces:\n'
               '• Core: moves 1 square in any direction\n'
               '• Lancer: slides any distance horizontally or vertically\n'
               '• Blinker: jumps in an L-shape\n\n'
               'Controls:\n'
-              'Tap or click one of your Cyan pieces, then tap/click a highlighted square to move.\n\n'
+              'Tap or click one of the current player\'s pieces, then tap/click a highlighted square to move.\n\n'
               'Scoring:\n'
               '• Core = 100\n'
               '• Lancer = 9\n'
-              '• Blinker = 5\n',
+              '• Blinker = 5\n\n'
+              'Board Styles:\n'
+              '• Round Board: hybrid circular arena with square logic\n'
+              '• Square Board: classic grid frame\n',
             ),
           ),
           actions: [
@@ -662,9 +702,6 @@ class _GamePageState extends State<GamePage> {
       },
     );
   }
-
-  bool get isCompact => MediaQuery.of(context).size.width < 700;
-  bool get isWide => MediaQuery.of(context).size.width >= 950;
 
   @override
   Widget build(BuildContext context) {
@@ -702,6 +739,7 @@ class _GamePageState extends State<GamePage> {
                       selected: selected,
                       isMoveTarget: isTarget,
                       onTapCell: handleTap,
+                      useRoundBoard: useRoundBoard,
                     ),
                   ),
                 ),
@@ -711,7 +749,7 @@ class _GamePageState extends State<GamePage> {
         ),
         const SizedBox(width: 12),
         SizedBox(
-          width: 280,
+          width: 290,
           child: Column(
             children: [
               _buildSidePanel(),
@@ -740,6 +778,7 @@ class _GamePageState extends State<GamePage> {
                     selected: selected,
                     isMoveTarget: isTarget,
                     onTapCell: handleTap,
+                    useRoundBoard: useRoundBoard,
                   ),
                 );
               },
@@ -815,6 +854,85 @@ class _GamePageState extends State<GamePage> {
                 ),
               ],
             ),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: [
+              ChoiceChip(
+                label: const Text('VS AI'),
+                selected: mode == GameMode.vsAI,
+                onSelected: (_) => setMode(GameMode.vsAI),
+                selectedColor: const Color(0xFF173447),
+                backgroundColor: const Color(0xFF0B1623),
+                side: BorderSide(
+                  color: mode == GameMode.vsAI
+                      ? const Color(0xFF58F3FF)
+                      : Colors.white24,
+                ),
+                labelStyle: TextStyle(
+                  color: mode == GameMode.vsAI
+                      ? const Color(0xFF58F3FF)
+                      : Colors.white70,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              ChoiceChip(
+                label: const Text('Local 2P'),
+                selected: mode == GameMode.local,
+                onSelected: (_) => setMode(GameMode.local),
+                selectedColor: const Color(0xFF173447),
+                backgroundColor: const Color(0xFF0B1623),
+                side: BorderSide(
+                  color: mode == GameMode.local
+                      ? const Color(0xFF58F3FF)
+                      : Colors.white24,
+                ),
+                labelStyle: TextStyle(
+                  color: mode == GameMode.local
+                      ? const Color(0xFF58F3FF)
+                      : Colors.white70,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              ChoiceChip(
+                label: const Text('Round Board'),
+                selected: useRoundBoard,
+                onSelected: (_) => setBoardStyle(true),
+                selectedColor: const Color(0xFF173447),
+                backgroundColor: const Color(0xFF0B1623),
+                side: BorderSide(
+                  color: useRoundBoard
+                      ? const Color(0xFF58F3FF)
+                      : Colors.white24,
+                ),
+                labelStyle: TextStyle(
+                  color: useRoundBoard
+                      ? const Color(0xFF58F3FF)
+                      : Colors.white70,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              ChoiceChip(
+                label: const Text('Square Board'),
+                selected: !useRoundBoard,
+                onSelected: (_) => setBoardStyle(false),
+                selectedColor: const Color(0xFF173447),
+                backgroundColor: const Color(0xFF0B1623),
+                side: BorderSide(
+                  color: !useRoundBoard
+                      ? const Color(0xFF58F3FF)
+                      : Colors.white24,
+                ),
+                labelStyle: TextStyle(
+                  color: !useRoundBoard
+                      ? const Color(0xFF58F3FF)
+                      : Colors.white70,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ),
         ],
       ),
     );
@@ -873,9 +991,13 @@ class _GamePageState extends State<GamePage> {
             style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 10),
+          Text('Mode: ${mode.label}'),
+          const SizedBox(height: 6),
           Text('Current Turn: ${state.turn.label}'),
           const SizedBox(height: 6),
           Text('Difficulty: ${difficulty.label}'),
+          const SizedBox(height: 6),
+          Text('Board: ${useRoundBoard ? "Round" : "Square"}'),
           const SizedBox(height: 6),
           Text('Selected: ${_selectedText()}'),
           const SizedBox(height: 6),
@@ -980,6 +1102,7 @@ class GameBoard extends StatelessWidget {
   final BoardPos? selected;
   final bool Function(BoardPos) isMoveTarget;
   final void Function(BoardPos) onTapCell;
+  final bool useRoundBoard;
 
   const GameBoard({
     super.key,
@@ -987,7 +1110,34 @@ class GameBoard extends StatelessWidget {
     required this.selected,
     required this.isMoveTarget,
     required this.onTapCell,
+    required this.useRoundBoard,
   });
+
+  Widget _buildGrid(double cellSize) {
+    return Stack(
+      children: [
+        Positioned.fill(
+          child: CustomPaint(
+            painter: GridPainter(roundMode: useRoundBoard),
+          ),
+        ),
+        for (int r = 0; r < GameState.size; r++)
+          for (int c = 0; c < GameState.size; c++)
+            Positioned(
+              left: c * cellSize,
+              top: r * cellSize,
+              width: cellSize,
+              height: cellSize,
+              child: _BoardCell(
+                piece: state.board[r][c],
+                selected: selected == BoardPos(r, c),
+                moveTarget: isMoveTarget(BoardPos(r, c)),
+                onTap: () => onTapCell(BoardPos(r, c)),
+              ),
+            ),
+      ],
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -995,6 +1145,42 @@ class GameBoard extends StatelessWidget {
       builder: (context, constraints) {
         final side = min(constraints.maxWidth, constraints.maxHeight);
         final cellSize = side / GameState.size;
+
+        if (useRoundBoard) {
+          return Container(
+            width: side,
+            height: side,
+            decoration: const BoxDecoration(
+              shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(
+                  color: Color(0x3358F3FF),
+                  blurRadius: 38,
+                  spreadRadius: 2,
+                ),
+              ],
+            ),
+            child: ClipOval(
+              child: Container(
+                width: side,
+                height: side,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(color: const Color(0x8858F3FF), width: 2),
+                  gradient: const RadialGradient(
+                    colors: [
+                      Color(0x3300E7FF),
+                      Color(0x1600E7FF),
+                      Color(0x0400E7FF),
+                    ],
+                    radius: 1.0,
+                  ),
+                ),
+                child: _buildGrid(cellSize),
+              ),
+            ),
+          );
+        }
 
         return Container(
           width: side,
@@ -1019,25 +1205,7 @@ class GameBoard extends StatelessWidget {
               ),
             ],
           ),
-          child: Stack(
-            children: [
-              Positioned.fill(child: CustomPaint(painter: GridPainter())),
-              for (int r = 0; r < GameState.size; r++)
-                for (int c = 0; c < GameState.size; c++)
-                  Positioned(
-                    left: c * cellSize,
-                    top: r * cellSize,
-                    width: cellSize,
-                    height: cellSize,
-                    child: _BoardCell(
-                      piece: state.board[r][c],
-                      selected: selected == BoardPos(r, c),
-                      moveTarget: isMoveTarget(BoardPos(r, c)),
-                      onTap: () => onTapCell(BoardPos(r, c)),
-                    ),
-                  ),
-            ],
-          ),
+          child: _buildGrid(cellSize),
         );
       },
     );
@@ -1262,6 +1430,10 @@ class PiecePainter extends CustomPainter {
 }
 
 class GridPainter extends CustomPainter {
+  final bool roundMode;
+
+  GridPainter({required this.roundMode});
+
   @override
   void paint(Canvas canvas, Size size) {
     final glow = Paint()
@@ -1274,6 +1446,37 @@ class GridPainter extends CustomPainter {
       ..strokeWidth = 1.2;
 
     final step = size.width / GameState.size;
+
+    if (roundMode) {
+      final center = size.center(Offset.zero);
+
+      final ring = Paint()
+        ..color = const Color(0xAA58F3FF)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.5;
+
+      final ringGlow = Paint()
+        ..color = const Color(0x2258F3FF)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 5
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8);
+
+      canvas.drawCircle(center, size.width * 0.49, ringGlow);
+      canvas.drawCircle(center, size.width * 0.49, ring);
+      canvas.drawCircle(center, size.width * 0.38, ringGlow);
+      canvas.drawCircle(center, size.width * 0.38, ring);
+
+      for (int i = 1; i < GameState.size; i++) {
+        final d = i * step;
+        canvas.drawLine(Offset(d, 0), Offset(d, size.height), glow);
+        canvas.drawLine(Offset(0, d), Offset(size.width, d), glow);
+        canvas.drawLine(Offset(d, 0), Offset(d, size.height), line);
+        canvas.drawLine(Offset(0, d), Offset(size.width, d), line);
+      }
+
+      canvas.drawCircle(center, step * 0.24, ring);
+      return;
+    }
 
     for (int i = 1; i < GameState.size; i++) {
       final d = i * step;
@@ -1293,7 +1496,9 @@ class GridPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+  bool shouldRepaint(covariant GridPainter oldDelegate) {
+    return oldDelegate.roundMode != roundMode;
+  }
 }
 
 class HoloPanel extends StatelessWidget {
