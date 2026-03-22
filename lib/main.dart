@@ -26,6 +26,10 @@ class DejairkApp extends StatelessWidget {
   }
 }
 
+/// ===============================================================
+/// GAME TYPES
+/// ===============================================================
+
 enum PlayerSide { cyan, red }
 
 enum UnitType { core, lancer, blinker }
@@ -161,6 +165,10 @@ class GameMove {
   });
 }
 
+/// ===============================================================
+/// GAME STATE
+/// ===============================================================
+
 class GameState {
   static const int size = 5;
 
@@ -242,9 +250,14 @@ class GameState {
   }
 }
 
+/// ===============================================================
+/// RULES
+/// ===============================================================
+
 class Rules {
   static List<GameMove> allLegalMoves(GameState state, PlayerSide side) {
     final result = <GameMove>[];
+
     for (int r = 0; r < GameState.size; r++) {
       for (int c = 0; c < GameState.size; c++) {
         final from = BoardPos(r, c);
@@ -254,6 +267,7 @@ class Rules {
         }
       }
     }
+
     return result;
   }
 
@@ -277,17 +291,21 @@ class Rules {
     PlayerSide side,
   ) {
     final moves = <GameMove>[];
+
     for (int dr = -1; dr <= 1; dr++) {
       for (int dc = -1; dc <= 1; dc++) {
         if (dr == 0 && dc == 0) continue;
+
         final to = BoardPos(from.row + dr, from.col + dc);
         if (!to.inside(GameState.size)) continue;
+
         final target = state.at(to);
         if (target == null || target.side != side) {
           moves.add(GameMove(from: from, to: to));
         }
       }
     }
+
     return moves;
   }
 
@@ -297,6 +315,7 @@ class Rules {
     PlayerSide side,
   ) {
     final moves = <GameMove>[];
+
     const dirs = [
       [1, 0],
       [-1, 0],
@@ -335,6 +354,7 @@ class Rules {
     PlayerSide side,
   ) {
     final moves = <GameMove>[];
+
     const offsets = [
       [2, 1],
       [2, -1],
@@ -349,6 +369,7 @@ class Rules {
     for (final offset in offsets) {
       final to = BoardPos(from.row + offset[0], from.col + offset[1]);
       if (!to.inside(GameState.size)) continue;
+
       final target = state.at(to);
       if (target == null || target.side != side) {
         moves.add(GameMove(from: from, to: to));
@@ -403,6 +424,10 @@ class Rules {
     return true;
   }
 }
+
+/// ===============================================================
+/// AI
+/// ===============================================================
 
 class HoloAI {
   final Difficulty difficulty;
@@ -537,6 +562,10 @@ class HoloAI {
   }
 }
 
+/// ===============================================================
+/// MAIN PAGE
+/// ===============================================================
+
 class GamePage extends StatefulWidget {
   const GamePage({super.key});
 
@@ -546,9 +575,11 @@ class GamePage extends StatefulWidget {
 
 class _GamePageState extends State<GamePage> {
   late GameState state;
+
   Difficulty difficulty = Difficulty.medium;
   GameMode mode = GameMode.vsAI;
   bool useRoundBoard = true;
+  bool showControls = false;
 
   BoardPos? selected;
   List<GameMove> selectedMoves = [];
@@ -560,8 +591,7 @@ class _GamePageState extends State<GamePage> {
     state = GameState.initial();
   }
 
-  bool get isCompact => MediaQuery.of(context).size.width < 700;
-  bool get isWide => MediaQuery.of(context).size.width >= 950;
+  bool get isWide => MediaQuery.of(context).size.width >= 1000;
 
   void restartGame() {
     setState(() {
@@ -670,7 +700,7 @@ class _GamePageState extends State<GamePage> {
         return AlertDialog(
           backgroundColor: const Color(0xFF0B1623),
           title: const Text('How to Play'),
-          content: SingleChildScrollView(
+          content: const SingleChildScrollView(
             child: Text(
               'Goal:\n'
               'Capture the enemy Core, or leave the opponent with no legal moves.\n\n'
@@ -686,10 +716,7 @@ class _GamePageState extends State<GamePage> {
               'Scoring:\n'
               '• Core = 100\n'
               '• Lancer = 9\n'
-              '• Blinker = 5\n\n'
-              'Board Styles:\n'
-              '• Round Board: hybrid circular arena with square logic\n'
-              '• Square Board: classic grid frame\n',
+              '• Blinker = 5\n',
             ),
           ),
           actions: [
@@ -711,7 +738,7 @@ class _GamePageState extends State<GamePage> {
           const Positioned.fill(child: HoloBackdrop()),
           SafeArea(
             child: Padding(
-              padding: const EdgeInsets.all(12),
+              padding: const EdgeInsets.all(10),
               child: isWide ? _buildWideLayout() : _buildCompactLayout(),
             ),
           ),
@@ -725,11 +752,11 @@ class _GamePageState extends State<GamePage> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Expanded(
-          flex: 5,
+          flex: 6,
           child: Column(
             children: [
               _buildTopBar(),
-              const SizedBox(height: 12),
+              const SizedBox(height: 8),
               Expanded(
                 child: Center(
                   child: AspectRatio(
@@ -747,13 +774,11 @@ class _GamePageState extends State<GamePage> {
             ],
           ),
         ),
-        const SizedBox(width: 12),
+        const SizedBox(width: 10),
         SizedBox(
-          width: 290,
-          child: Column(
-            children: [
-              _buildSidePanel(),
-            ],
+          width: 300,
+          child: SingleChildScrollView(
+            child: _buildControlsPanel(alwaysExpanded: true),
           ),
         ),
       ],
@@ -764,12 +789,16 @@ class _GamePageState extends State<GamePage> {
     return Column(
       children: [
         _buildTopBar(),
-        const SizedBox(height: 10),
+        const SizedBox(height: 8),
         Expanded(
           child: Center(
             child: LayoutBuilder(
               builder: (context, constraints) {
-                final boardSide = min(constraints.maxWidth, constraints.maxHeight);
+                final boardSide = min(
+                  constraints.maxWidth,
+                  constraints.maxHeight * 0.98,
+                );
+
                 return SizedBox(
                   width: boardSide,
                   height: boardSide,
@@ -785,285 +814,194 @@ class _GamePageState extends State<GamePage> {
             ),
           ),
         ),
-        const SizedBox(height: 10),
-        _buildBottomBar(),
+        const SizedBox(height: 8),
+        _buildCompactFooter(),
       ],
     );
   }
 
   Widget _buildTopBar() {
     return HoloPanel(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Row(
         children: [
-          if (isCompact)
-            Column(
+          Expanded(
+            child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Text(
                   'DEJAIRK: HOLO GRID',
-                  style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800),
-                ),
-                const SizedBox(height: 4),
-                Text(state.status, style: const TextStyle(fontSize: 13)),
-                const SizedBox(height: 10),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    HoloButton(
-                      icon: Icons.help_outline,
-                      label: 'How To Play',
-                      onPressed: showHowToPlay,
-                    ),
-                    HoloButton(
-                      icon: Icons.refresh,
-                      label: 'Restart',
-                      onPressed: restartGame,
-                    ),
-                  ],
-                ),
-              ],
-            )
-          else
-            Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'DEJAIRK: HOLO GRID',
-                        style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(state.status, style: const TextStyle(fontSize: 14)),
-                    ],
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.6,
                   ),
                 ),
-                HoloButton(
-                  icon: Icons.help_outline,
-                  label: 'How To Play',
-                  onPressed: showHowToPlay,
-                ),
-                const SizedBox(width: 8),
-                HoloButton(
-                  icon: Icons.refresh,
-                  label: 'Restart',
-                  onPressed: restartGame,
+                const SizedBox(height: 2),
+                Text(
+                  state.status,
+                  style: const TextStyle(fontSize: 13, color: Colors.white70),
                 ),
               ],
             ),
-          const SizedBox(height: 10),
-          Wrap(
-            spacing: 6,
-            runSpacing: 6,
-            children: [
-              ChoiceChip(
-                label: const Text('VS AI'),
-                selected: mode == GameMode.vsAI,
-                onSelected: (_) => setMode(GameMode.vsAI),
-                selectedColor: const Color(0xFF173447),
-                backgroundColor: const Color(0xFF0B1623),
-                side: BorderSide(
-                  color: mode == GameMode.vsAI
-                      ? const Color(0xFF58F3FF)
-                      : Colors.white24,
-                ),
-                labelStyle: TextStyle(
-                  color: mode == GameMode.vsAI
-                      ? const Color(0xFF58F3FF)
-                      : Colors.white70,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              ChoiceChip(
-                label: const Text('Local 2P'),
-                selected: mode == GameMode.local,
-                onSelected: (_) => setMode(GameMode.local),
-                selectedColor: const Color(0xFF173447),
-                backgroundColor: const Color(0xFF0B1623),
-                side: BorderSide(
-                  color: mode == GameMode.local
-                      ? const Color(0xFF58F3FF)
-                      : Colors.white24,
-                ),
-                labelStyle: TextStyle(
-                  color: mode == GameMode.local
-                      ? const Color(0xFF58F3FF)
-                      : Colors.white70,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              ChoiceChip(
-                label: const Text('Round Board'),
-                selected: useRoundBoard,
-                onSelected: (_) => setBoardStyle(true),
-                selectedColor: const Color(0xFF173447),
-                backgroundColor: const Color(0xFF0B1623),
-                side: BorderSide(
-                  color: useRoundBoard
-                      ? const Color(0xFF58F3FF)
-                      : Colors.white24,
-                ),
-                labelStyle: TextStyle(
-                  color: useRoundBoard
-                      ? const Color(0xFF58F3FF)
-                      : Colors.white70,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              ChoiceChip(
-                label: const Text('Square Board'),
-                selected: !useRoundBoard,
-                onSelected: (_) => setBoardStyle(false),
-                selectedColor: const Color(0xFF173447),
-                backgroundColor: const Color(0xFF0B1623),
-                side: BorderSide(
-                  color: !useRoundBoard
-                      ? const Color(0xFF58F3FF)
-                      : Colors.white24,
-                ),
-                labelStyle: TextStyle(
-                  color: !useRoundBoard
-                      ? const Color(0xFF58F3FF)
-                      : Colors.white70,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ],
+          ),
+          const SizedBox(width: 8),
+          HoloIconMiniButton(
+            icon: Icons.help_outline,
+            onPressed: showHowToPlay,
+          ),
+          const SizedBox(width: 6),
+          HoloIconMiniButton(
+            icon: Icons.refresh,
+            onPressed: restartGame,
+          ),
+          const SizedBox(width: 6),
+          HoloIconMiniButton(
+            icon: showControls ? Icons.expand_less : Icons.tune,
+            onPressed: () {
+              setState(() {
+                showControls = !showControls;
+              });
+            },
           ),
         ],
       ),
     );
   }
 
-  Widget _buildBottomBar() {
-    return HoloPanel(
-      child: Column(
-        children: [
-          Row(
+  Widget _buildCompactFooter() {
+    return Column(
+      children: [
+        HoloPanel(
+          child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               _scoreBlock('Cyan', state.cyanScore, const Color(0xFF58F3FF)),
               _scoreBlock('Red', state.redScore, const Color(0xFFFF5A93)),
             ],
           ),
-          const SizedBox(height: 10),
-          Wrap(
-            spacing: 6,
-            runSpacing: 6,
-            alignment: WrapAlignment.center,
-            children: Difficulty.values.map((d) {
-              final selectedChip = difficulty == d;
-              return ChoiceChip(
-                label: Text(d.label),
-                selected: selectedChip,
-                onSelected: (_) => setDifficulty(d),
-                selectedColor: const Color(0xFF173447),
-                backgroundColor: const Color(0xFF0B1623),
-                side: BorderSide(
-                  color: selectedChip
-                      ? const Color(0xFF58F3FF)
-                      : Colors.white24,
-                ),
-                labelStyle: TextStyle(
-                  color: selectedChip
-                      ? const Color(0xFF58F3FF)
-                      : Colors.white70,
-                  fontWeight: FontWeight.w700,
-                ),
-              );
-            }).toList(),
-          ),
+        ),
+        if (showControls) ...[
+          const SizedBox(height: 8),
+          _buildControlsPanel(alwaysExpanded: false),
         ],
-      ),
+      ],
     );
   }
 
-  Widget _buildSidePanel() {
+  Widget _buildControlsPanel({required bool alwaysExpanded}) {
     return HoloPanel(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
-            'Match Info',
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            'Game Controls',
+            style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 10),
-          Text('Mode: ${mode.label}'),
-          const SizedBox(height: 6),
-          Text('Current Turn: ${state.turn.label}'),
-          const SizedBox(height: 6),
-          Text('Difficulty: ${difficulty.label}'),
-          const SizedBox(height: 6),
-          Text('Board: ${useRoundBoard ? "Round" : "Square"}'),
-          const SizedBox(height: 6),
-          Text('Selected: ${_selectedText()}'),
-          const SizedBox(height: 6),
-          Text('Game Over: ${state.gameOver ? "Yes" : "No"}'),
-          if (state.winner != null) ...[
-            const SizedBox(height: 6),
-            Text('Winner: ${state.winner!.label}'),
-          ],
-          const SizedBox(height: 16),
-          const Text(
-            'Units',
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 10),
-          const LegendTile(
-            iconText: 'C',
-            title: 'Core',
-            subtitle: '1 square any direction',
-          ),
-          const SizedBox(height: 10),
-          const LegendTile(
-            iconText: 'L',
-            title: 'Lancer',
-            subtitle: 'Slides in straight lines',
-          ),
-          const SizedBox(height: 10),
-          const LegendTile(
-            iconText: 'B',
-            title: 'Blinker',
-            subtitle: 'Jumps in an L-shape',
-          ),
-          const SizedBox(height: 16),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
             children: [
-              _scoreBlock('Cyan', state.cyanScore, const Color(0xFF58F3FF)),
-              _scoreBlock('Red', state.redScore, const Color(0xFFFF5A93)),
+              _choiceChip(
+                text: 'VS AI',
+                selected: mode == GameMode.vsAI,
+                onTap: () => setMode(GameMode.vsAI),
+              ),
+              _choiceChip(
+                text: 'Local 2P',
+                selected: mode == GameMode.local,
+                onTap: () => setMode(GameMode.local),
+              ),
+              _choiceChip(
+                text: 'Round Board',
+                selected: useRoundBoard,
+                onTap: () => setBoardStyle(true),
+              ),
+              _choiceChip(
+                text: 'Square Board',
+                selected: !useRoundBoard,
+                onTap: () => setBoardStyle(false),
+              ),
             ],
           ),
           const SizedBox(height: 12),
+          const Text(
+            'Difficulty',
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 8),
           Wrap(
             spacing: 6,
             runSpacing: 6,
             children: Difficulty.values.map((d) {
-              final selectedChip = difficulty == d;
-              return ChoiceChip(
-                label: Text(d.label),
-                selected: selectedChip,
-                onSelected: (_) => setDifficulty(d),
-                selectedColor: const Color(0xFF173447),
-                backgroundColor: const Color(0xFF0B1623),
-                side: BorderSide(
-                  color: selectedChip
-                      ? const Color(0xFF58F3FF)
-                      : Colors.white24,
-                ),
-                labelStyle: TextStyle(
-                  color: selectedChip
-                      ? const Color(0xFF58F3FF)
-                      : Colors.white70,
-                  fontWeight: FontWeight.w700,
-                ),
+              return _choiceChip(
+                text: d.label,
+                selected: difficulty == d,
+                onTap: () => setDifficulty(d),
               );
             }).toList(),
           ),
+          const SizedBox(height: 12),
+          Text('Mode: ${mode.label}'),
+          const SizedBox(height: 4),
+          Text('Board: ${useRoundBoard ? "Round" : "Square"}'),
+          const SizedBox(height: 4),
+          Text('Current Turn: ${state.turn.label}'),
+          const SizedBox(height: 4),
+          Text('Selected: ${_selectedText()}'),
+          const SizedBox(height: 4),
+          Text('Game Over: ${state.gameOver ? "Yes" : "No"}'),
+          if (state.winner != null) ...[
+            const SizedBox(height: 4),
+            Text('Winner: ${state.winner!.label}'),
+          ],
+          if (alwaysExpanded) ...[
+            const SizedBox(height: 14),
+            const Text(
+              'Units',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            const LegendTile(
+              iconText: 'C',
+              title: 'Core',
+              subtitle: '1 square any direction',
+            ),
+            const SizedBox(height: 8),
+            const LegendTile(
+              iconText: 'L',
+              title: 'Lancer',
+              subtitle: 'Slides in straight lines',
+            ),
+            const SizedBox(height: 8),
+            const LegendTile(
+              iconText: 'B',
+              title: 'Blinker',
+              subtitle: 'Jumps in an L-shape',
+            ),
+          ],
         ],
+      ),
+    );
+  }
+
+  Widget _choiceChip({
+    required String text,
+    required bool selected,
+    required VoidCallback onTap,
+  }) {
+    return ChoiceChip(
+      label: Text(text),
+      selected: selected,
+      onSelected: (_) => onTap(),
+      selectedColor: const Color(0xFF173447),
+      backgroundColor: const Color(0xFF0B1623),
+      side: BorderSide(
+        color: selected ? const Color(0xFF58F3FF) : Colors.white24,
+      ),
+      labelStyle: TextStyle(
+        color: selected ? const Color(0xFF58F3FF) : Colors.white70,
+        fontWeight: FontWeight.w700,
       ),
     );
   }
@@ -1083,7 +1021,7 @@ class _GamePageState extends State<GamePage> {
         const SizedBox(height: 2),
         Text(
           '$score',
-          style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w800),
+          style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800),
         ),
       ],
     );
@@ -1096,6 +1034,10 @@ class _GamePageState extends State<GamePage> {
     return '${piece.name} at (${selected!.row}, ${selected!.col})';
   }
 }
+
+/// ===============================================================
+/// BOARD
+/// ===============================================================
 
 class GameBoard extends StatelessWidget {
   final GameState state;
@@ -1147,38 +1089,37 @@ class GameBoard extends StatelessWidget {
         final cellSize = side / GameState.size;
 
         if (useRoundBoard) {
-          return Container(
-            width: side,
-            height: side,
-            decoration: const BoxDecoration(
-              shape: BoxShape.circle,
-              boxShadow: [
-                BoxShadow(
-                  color: Color(0x3358F3FF),
-                  blurRadius: 38,
-                  spreadRadius: 2,
+          return Stack(
+            children: [
+              Positioned.fill(
+                child: CustomPaint(
+                  painter: RoundBoardFramePainter(),
                 ),
-              ],
-            ),
-            child: ClipOval(
-              child: Container(
-                width: side,
-                height: side,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  border: Border.all(color: const Color(0x8858F3FF), width: 2),
-                  gradient: const RadialGradient(
-                    colors: [
-                      Color(0x3300E7FF),
-                      Color(0x1600E7FF),
-                      Color(0x0400E7FF),
-                    ],
-                    radius: 1.0,
-                  ),
-                ),
-                child: _buildGrid(cellSize),
               ),
-            ),
+              // Key idea:
+              // We do NOT clip the entire board to a circle.
+              // We keep the full square logic and full square visibility,
+              // but draw a circular frame around it.
+              Padding(
+                padding: EdgeInsets.all(side * 0.06),
+                child: Container(
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(18),
+                    border: Border.all(color: const Color(0x6658F3FF), width: 1.5),
+                    gradient: const LinearGradient(
+                      colors: [
+                        Color(0x2200E7FF),
+                        Color(0x1100E7FF),
+                        Color(0x2200E7FF),
+                      ],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                  ),
+                  child: _buildGrid(cellSize * 0.88),
+                ),
+              ),
+            ],
           );
         }
 
@@ -1234,9 +1175,9 @@ class _BoardCell extends StatelessWidget {
         onTap: onTap,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 140),
-          margin: const EdgeInsets.all(5),
+          margin: const EdgeInsets.all(4),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(14),
+            borderRadius: BorderRadius.circular(12),
             color: selected
                 ? const Color(0x2247F1FF)
                 : moveTarget
@@ -1256,7 +1197,7 @@ class _BoardCell extends StatelessWidget {
                       color: selected
                           ? const Color(0x3358F3FF)
                           : const Color(0x33FFD56A),
-                      blurRadius: 16,
+                      blurRadius: 14,
                     ),
                   ]
                 : null,
@@ -1270,7 +1211,7 @@ class _BoardCell extends StatelessWidget {
                       shape: BoxShape.circle,
                       color: Color(0x88FFD56A),
                     ),
-                    child: SizedBox(width: 14, height: 14),
+                    child: SizedBox(width: 12, height: 12),
                   ),
                 ),
               if (piece != null) Center(child: HoloPiece(piece: piece!)),
@@ -1281,6 +1222,10 @@ class _BoardCell extends StatelessWidget {
     );
   }
 }
+
+/// ===============================================================
+/// PIECE VISUALS
+/// ===============================================================
 
 class HoloPiece extends StatelessWidget {
   final Piece piece;
@@ -1293,8 +1238,8 @@ class HoloPiece extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      width: 52,
-      height: 52,
+      width: 48,
+      height: 48,
       child: CustomPaint(
         painter: PiecePainter(piece: piece),
       ),
@@ -1319,7 +1264,7 @@ class PiecePainter extends CustomPainter {
     final ringPaint = Paint()
       ..color = color.withOpacity(0.95)
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 2.1;
+      ..strokeWidth = 2.0;
 
     final fillPaint = Paint()
       ..shader = RadialGradient(
@@ -1351,7 +1296,7 @@ class PiecePainter extends CustomPainter {
         text: piece.glyph,
         style: TextStyle(
           color: Colors.white.withOpacity(0.95),
-          fontSize: 14,
+          fontSize: 13,
           fontWeight: FontWeight.bold,
           shadows: [Shadow(color: color.withOpacity(0.9), blurRadius: 12)],
         ),
@@ -1419,7 +1364,7 @@ class PiecePainter extends CustomPainter {
       ..lineTo(center.dx + size.width * 0.20, center.dy - size.height * 0.23);
 
     canvas.drawPath(path, p);
-    canvas.drawCircle(center.translate(size.width * 0.15, size.height * 0.14), 5, p);
+    canvas.drawCircle(center.translate(size.width * 0.15, size.height * 0.14), 4.5, p);
   }
 
   @override
@@ -1428,6 +1373,10 @@ class PiecePainter extends CustomPainter {
         oldDelegate.piece.type != piece.type;
   }
 }
+
+/// ===============================================================
+/// BOARD PAINTERS
+/// ===============================================================
 
 class GridPainter extends CustomPainter {
   final bool roundMode;
@@ -1443,40 +1392,9 @@ class GridPainter extends CustomPainter {
 
     final line = Paint()
       ..color = const Color(0xAA58F3FF)
-      ..strokeWidth = 1.2;
+      ..strokeWidth = 1.1;
 
     final step = size.width / GameState.size;
-
-    if (roundMode) {
-      final center = size.center(Offset.zero);
-
-      final ring = Paint()
-        ..color = const Color(0xAA58F3FF)
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 1.5;
-
-      final ringGlow = Paint()
-        ..color = const Color(0x2258F3FF)
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 5
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8);
-
-      canvas.drawCircle(center, size.width * 0.49, ringGlow);
-      canvas.drawCircle(center, size.width * 0.49, ring);
-      canvas.drawCircle(center, size.width * 0.38, ringGlow);
-      canvas.drawCircle(center, size.width * 0.38, ring);
-
-      for (int i = 1; i < GameState.size; i++) {
-        final d = i * step;
-        canvas.drawLine(Offset(d, 0), Offset(d, size.height), glow);
-        canvas.drawLine(Offset(0, d), Offset(size.width, d), glow);
-        canvas.drawLine(Offset(d, 0), Offset(d, size.height), line);
-        canvas.drawLine(Offset(0, d), Offset(size.width, d), line);
-      }
-
-      canvas.drawCircle(center, step * 0.24, ring);
-      return;
-    }
 
     for (int i = 1; i < GameState.size; i++) {
       final d = i * step;
@@ -1488,7 +1406,7 @@ class GridPainter extends CustomPainter {
 
     final center = size.center(Offset.zero);
     final centerRing = Paint()
-      ..color = const Color(0x4458F3FF)
+      ..color = roundMode ? const Color(0x8858F3FF) : const Color(0x4458F3FF)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.5;
 
@@ -1500,6 +1418,61 @@ class GridPainter extends CustomPainter {
     return oldDelegate.roundMode != roundMode;
   }
 }
+
+class RoundBoardFramePainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = size.center(Offset.zero);
+    final radius = size.width / 2;
+
+    final outerGlow = Paint()
+      ..color = const Color(0x3358F3FF)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 10
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 16);
+
+    final outerRing = Paint()
+      ..color = const Color(0xAA58F3FF)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2;
+
+    final innerRing = Paint()
+      ..color = const Color(0x6658F3FF)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.4;
+
+    final radialFill = Paint()
+      ..shader = const RadialGradient(
+        colors: [
+          Color(0x2200E7FF),
+          Color(0x1200E7FF),
+          Color(0x0400E7FF),
+        ],
+      ).createShader(Rect.fromCircle(center: center, radius: radius));
+
+    canvas.drawCircle(center, radius * 0.98, radialFill);
+    canvas.drawCircle(center, radius * 0.98, outerGlow);
+    canvas.drawCircle(center, radius * 0.98, outerRing);
+    canvas.drawCircle(center, radius * 0.82, innerRing);
+
+    final arcPaint = Paint()
+      ..color = const Color(0x8858F3FF)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.6;
+
+    final arcRect = Rect.fromCircle(center: center, radius: radius * 0.90);
+    canvas.drawArc(arcRect, 0.35, 0.9, false, arcPaint);
+    canvas.drawArc(arcRect, 2.15, 0.9, false, arcPaint);
+    canvas.drawArc(arcRect, 4.05, 0.9, false, arcPaint);
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+/// ===============================================================
+/// UI HELPERS
+/// ===============================================================
 
 class HoloPanel extends StatelessWidget {
   final Widget child;
@@ -1538,15 +1511,13 @@ class HoloPanel extends StatelessWidget {
   }
 }
 
-class HoloButton extends StatelessWidget {
+class HoloIconMiniButton extends StatelessWidget {
   final IconData icon;
-  final String label;
   final VoidCallback onPressed;
 
-  const HoloButton({
+  const HoloIconMiniButton({
     super.key,
     required this.icon,
-    required this.label,
     required this.onPressed,
   });
 
@@ -1555,37 +1526,22 @@ class HoloButton extends StatelessWidget {
     return Material(
       color: Colors.transparent,
       child: InkWell(
+        borderRadius: BorderRadius.circular(12),
         onTap: onPressed,
-        borderRadius: BorderRadius.circular(16),
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          width: 40,
+          height: 40,
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: const Color(0x6658F3FF), width: 1.1),
             gradient: const LinearGradient(
               colors: [
                 Color(0xBB0B1623),
                 Color(0xDD102131),
               ],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
             ),
-            border: Border.all(color: const Color(0x6658F3FF), width: 1.2),
-            boxShadow: const [
-              BoxShadow(
-                color: Color(0x2258F3FF),
-                blurRadius: 18,
-                spreadRadius: 1,
-              ),
-            ],
           ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(icon, size: 18, color: const Color(0xFF58F3FF)),
-              const SizedBox(width: 8),
-              Text(label),
-            ],
-          ),
+          child: Icon(icon, color: const Color(0xFF58F3FF), size: 20),
         ),
       ),
     );
@@ -1607,7 +1563,6 @@ class LegendTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Row(
-      mainAxisSize: MainAxisSize.min,
       children: [
         Container(
           width: 34,
