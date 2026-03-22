@@ -26,14 +26,8 @@ class DejairkApp extends StatelessWidget {
   }
 }
 
-/// ===============================================================
-/// CORE GAME TYPES
-/// ===============================================================
-
 enum PlayerSide { cyan, red }
-
 enum UnitType { core, lancer, blinker }
-
 enum Difficulty { easy, medium, hard }
 
 extension PlayerSideX on PlayerSide {
@@ -152,10 +146,6 @@ class GameMove {
   });
 }
 
-/// ===============================================================
-/// GAME STATE
-/// ===============================================================
-
 class GameState {
   static const int size = 5;
 
@@ -180,14 +170,12 @@ class GameState {
   factory GameState.initial() {
     final board = List.generate(size, (_) => List<Piece?>.filled(size, null));
 
-    // Red side starts on the top row.
     board[0][0] = const Piece(side: PlayerSide.red, type: UnitType.lancer);
     board[0][1] = const Piece(side: PlayerSide.red, type: UnitType.blinker);
     board[0][2] = const Piece(side: PlayerSide.red, type: UnitType.core);
     board[0][3] = const Piece(side: PlayerSide.red, type: UnitType.blinker);
     board[0][4] = const Piece(side: PlayerSide.red, type: UnitType.lancer);
 
-    // Cyan side starts on the bottom row.
     board[4][0] = const Piece(side: PlayerSide.cyan, type: UnitType.lancer);
     board[4][1] = const Piece(side: PlayerSide.cyan, type: UnitType.blinker);
     board[4][2] = const Piece(side: PlayerSide.cyan, type: UnitType.core);
@@ -239,14 +227,9 @@ class GameState {
   }
 }
 
-/// ===============================================================
-/// RULES
-/// ===============================================================
-
 class Rules {
   static List<GameMove> allLegalMoves(GameState state, PlayerSide side) {
     final result = <GameMove>[];
-
     for (int r = 0; r < GameState.size; r++) {
       for (int c = 0; c < GameState.size; c++) {
         final from = BoardPos(r, c);
@@ -256,7 +239,6 @@ class Rules {
         }
       }
     }
-
     return result;
   }
 
@@ -280,21 +262,17 @@ class Rules {
     PlayerSide side,
   ) {
     final moves = <GameMove>[];
-
     for (int dr = -1; dr <= 1; dr++) {
       for (int dc = -1; dc <= 1; dc++) {
         if (dr == 0 && dc == 0) continue;
-
         final to = BoardPos(from.row + dr, from.col + dc);
         if (!to.inside(GameState.size)) continue;
-
         final target = state.at(to);
         if (target == null || target.side != side) {
           moves.add(GameMove(from: from, to: to));
         }
       }
     }
-
     return moves;
   }
 
@@ -304,7 +282,6 @@ class Rules {
     PlayerSide side,
   ) {
     final moves = <GameMove>[];
-
     const dirs = [
       [1, 0],
       [-1, 0],
@@ -343,7 +320,6 @@ class Rules {
     PlayerSide side,
   ) {
     final moves = <GameMove>[];
-
     const offsets = [
       [2, 1],
       [2, -1],
@@ -358,7 +334,6 @@ class Rules {
     for (final offset in offsets) {
       final to = BoardPos(from.row + offset[0], from.col + offset[1]);
       if (!to.inside(GameState.size)) continue;
-
       final target = state.at(to);
       if (target == null || target.side != side) {
         moves.add(GameMove(from: from, to: to));
@@ -380,7 +355,6 @@ class Rules {
 
     final target = state.at(move.to);
 
-    // Award score for captures.
     if (target != null) {
       if (piece.side == PlayerSide.cyan) {
         state.cyanScore += target.value;
@@ -392,7 +366,6 @@ class Rules {
     state.set(move.to, piece);
     state.set(move.from, null);
 
-    // Win by capturing the enemy Core.
     final enemyCore = state.findCore(piece.side.opponent);
     if (enemyCore == null) {
       state.gameOver = true;
@@ -401,10 +374,8 @@ class Rules {
       return true;
     }
 
-    // Hand turn to the other player.
     state.turn = state.turn.opponent;
 
-    // Win by leaving opponent with no legal moves.
     final nextMoves = allLegalMoves(state, state.turn);
     if (nextMoves.isEmpty) {
       state.gameOver = true;
@@ -418,10 +389,6 @@ class Rules {
   }
 }
 
-/// ===============================================================
-/// AI
-/// ===============================================================
-
 class HoloAI {
   final Difficulty difficulty;
   final Random _random = Random();
@@ -432,7 +399,6 @@ class HoloAI {
     final moves = Rules.allLegalMoves(state, PlayerSide.red);
     if (moves.isEmpty) return null;
 
-    // Easier difficulties sometimes choose a random legal move.
     if (_random.nextDouble() < difficulty.mistakeChance) {
       return moves[_random.nextInt(moves.length)];
     }
@@ -483,12 +449,10 @@ class HoloAI {
 
     if (maximizingRed) {
       int best = -999999;
-
       for (final move in moves) {
         final next = state.clone();
         next.turn = side;
         Rules.applyMove(next, move);
-
         best = max(
           best,
           _minimax(
@@ -499,20 +463,16 @@ class HoloAI {
             beta: beta,
           ),
         );
-
         alpha = max(alpha, best);
         if (beta <= alpha) break;
       }
-
       return best;
     } else {
       int best = 999999;
-
       for (final move in moves) {
         final next = state.clone();
         next.turn = side;
         Rules.applyMove(next, move);
-
         best = min(
           best,
           _minimax(
@@ -523,11 +483,9 @@ class HoloAI {
             beta: beta,
           ),
         );
-
         beta = min(beta, best);
         if (beta <= alpha) break;
       }
-
       return best;
     }
   }
@@ -548,7 +506,6 @@ class HoloAI {
 
         final centerBias = 4 - ((r - 2).abs() + (c - 2).abs());
         int value = piece.value * 10 + centerBias;
-
         if (piece.type == UnitType.blinker) value += 2;
         if (piece.type == UnitType.lancer) value += 1;
 
@@ -558,17 +515,12 @@ class HoloAI {
 
     score += state.redScore * 3;
     score -= state.cyanScore * 3;
-
     score += Rules.allLegalMoves(state, PlayerSide.red).length * 2;
     score -= Rules.allLegalMoves(state, PlayerSide.cyan).length * 2;
 
     return score;
   }
 }
-
-/// ===============================================================
-/// MAIN GAME PAGE
-/// ===============================================================
 
 class GamePage extends StatefulWidget {
   const GamePage({super.key});
@@ -612,7 +564,6 @@ class _GamePageState extends State<GamePage> {
 
     final piece = state.at(pos);
 
-    // First tap on a Cyan piece selects it.
     if (piece != null && piece.side == PlayerSide.cyan) {
       setState(() {
         selected = pos;
@@ -621,10 +572,8 @@ class _GamePageState extends State<GamePage> {
       return;
     }
 
-    // Second tap tries to move the selected piece.
     if (selected != null) {
       final matchingMove = selectedMoves.where((m) => m.to == pos).toList();
-
       if (matchingMove.isNotEmpty) {
         setState(() {
           Rules.applyMove(state, matchingMove.first);
@@ -700,12 +649,7 @@ class _GamePageState extends State<GamePage> {
               'Scoring:\n'
               '• Core = 100\n'
               '• Lancer = 9\n'
-              '• Blinker = 5\n\n'
-              'Tips:\n'
-              '• Protect your Core\n'
-              '• Use Lancers to control lanes\n'
-              '• Use Blinkers for surprise attacks\n'
-              '• Controlling the center usually helps',
+              '• Blinker = 5\n',
             ),
           ),
           actions: [
@@ -719,19 +663,19 @@ class _GamePageState extends State<GamePage> {
     );
   }
 
+  bool get isCompact => MediaQuery.of(context).size.width < 700;
+  bool get isWide => MediaQuery.of(context).size.width >= 950;
+
   @override
   Widget build(BuildContext context) {
-    final width = MediaQuery.of(context).size.width;
-    final wide = width >= 950;
-
     return Scaffold(
       body: Stack(
         children: [
           const Positioned.fill(child: HoloBackdrop()),
           SafeArea(
             child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: wide ? _buildWideLayout() : _buildNarrowLayout(),
+              padding: const EdgeInsets.all(12),
+              child: isWide ? _buildWideLayout() : _buildCompactLayout(),
             ),
           ),
         ],
@@ -747,8 +691,8 @@ class _GamePageState extends State<GamePage> {
           flex: 5,
           child: Column(
             children: [
-              _buildHeader(),
-              const SizedBox(height: 16),
+              _buildTopBar(),
+              const SizedBox(height: 12),
               Expanded(
                 child: Center(
                   child: AspectRatio(
@@ -765,14 +709,12 @@ class _GamePageState extends State<GamePage> {
             ],
           ),
         ),
-        const SizedBox(width: 16),
+        const SizedBox(width: 12),
         SizedBox(
-          width: 300,
+          width: 280,
           child: Column(
             children: [
-              _buildInfoPanel(),
-              const SizedBox(height: 16),
-              _buildLegendPanel(),
+              _buildSidePanel(),
             ],
           ),
         ),
@@ -780,222 +722,155 @@ class _GamePageState extends State<GamePage> {
     );
   }
 
-  Widget _buildNarrowLayout() {
+  Widget _buildCompactLayout() {
     return Column(
       children: [
-        _buildHeader(),
-        const SizedBox(height: 12),
+        _buildTopBar(),
+        const SizedBox(height: 10),
         Expanded(
-          child: Column(
-            children: [
-              Expanded(
-                child: Center(
-                  child: AspectRatio(
-                    aspectRatio: 1,
-                    child: GameBoard(
-                      state: state,
-                      selected: selected,
-                      isMoveTarget: isTarget,
-                      onTapCell: handleTap,
-                    ),
+          child: Center(
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final boardSide = min(constraints.maxWidth, constraints.maxHeight);
+                return SizedBox(
+                  width: boardSide,
+                  height: boardSide,
+                  child: GameBoard(
+                    state: state,
+                    selected: selected,
+                    isMoveTarget: isTarget,
+                    onTapCell: handleTap,
                   ),
-                ),
-              ),
-              const SizedBox(height: 12),
-              _buildInfoPanel(),
-              const SizedBox(height: 12),
-              _buildLegendPanel(),
-            ],
+                );
+              },
+            ),
           ),
         ),
+        const SizedBox(height: 10),
+        _buildBottomBar(),
       ],
     );
   }
 
-  Widget _buildHeader() {
-    final width = MediaQuery.of(context).size.width;
-    final compact = width < 700;
-
-    final titlePanel = HoloPanel(
+  Widget _buildTopBar() {
+    return HoloPanel(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'DEJAIRK: HOLO GRID',
-            style: TextStyle(
-              fontSize: 24,
-              fontWeight: FontWeight.w800,
-              letterSpacing: 1.0,
+          if (isCompact)
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'DEJAIRK: HOLO GRID',
+                  style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800),
+                ),
+                const SizedBox(height: 4),
+                Text(state.status, style: const TextStyle(fontSize: 13)),
+                const SizedBox(height: 10),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    HoloButton(
+                      icon: Icons.help_outline,
+                      label: 'How To Play',
+                      onPressed: showHowToPlay,
+                    ),
+                    HoloButton(
+                      icon: Icons.refresh,
+                      label: 'Restart',
+                      onPressed: restartGame,
+                    ),
+                  ],
+                ),
+              ],
+            )
+          else
+            Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'DEJAIRK: HOLO GRID',
+                        style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(state.status, style: const TextStyle(fontSize: 14)),
+                    ],
+                  ),
+                ),
+                HoloButton(
+                  icon: Icons.help_outline,
+                  label: 'How To Play',
+                  onPressed: showHowToPlay,
+                ),
+                const SizedBox(width: 8),
+                HoloButton(
+                  icon: Icons.refresh,
+                  label: 'Restart',
+                  onPressed: restartGame,
+                ),
+              ],
             ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBottomBar() {
+    return HoloPanel(
+      child: Column(
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              _scoreBlock('Cyan', state.cyanScore, const Color(0xFF58F3FF)),
+              _scoreBlock('Red', state.redScore, const Color(0xFFFF5A93)),
+            ],
           ),
-          const SizedBox(height: 6),
-          Text(
-            state.status,
-            style: const TextStyle(fontSize: 14),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            alignment: WrapAlignment.center,
+            children: Difficulty.values.map((d) {
+              final selectedChip = difficulty == d;
+              return ChoiceChip(
+                label: Text(d.label),
+                selected: selectedChip,
+                onSelected: (_) => setDifficulty(d),
+                selectedColor: const Color(0xFF173447),
+                backgroundColor: const Color(0xFF0B1623),
+                side: BorderSide(
+                  color: selectedChip
+                      ? const Color(0xFF58F3FF)
+                      : Colors.white24,
+                ),
+                labelStyle: TextStyle(
+                  color: selectedChip
+                      ? const Color(0xFF58F3FF)
+                      : Colors.white70,
+                  fontWeight: FontWeight.w700,
+                ),
+              );
+            }).toList(),
           ),
         ],
       ),
     );
-
-    final buttonRow = Wrap(
-      spacing: 8,
-      runSpacing: 8,
-      alignment: WrapAlignment.start,
-      children: [
-        HoloButton(
-          icon: Icons.help_outline,
-          label: 'How To Play',
-          onPressed: showHowToPlay,
-        ),
-        HoloButton(
-          icon: Icons.refresh,
-          label: 'Restart',
-          onPressed: restartGame,
-        ),
-      ],
-    );
-
-    final scoreDifficulty = compact
-        ? Column(
-            children: [
-              HoloPanel(
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    _scoreBlock('Cyan', state.cyanScore, const Color(0xFF58F3FF)),
-                    _scoreBlock('Red', state.redScore, const Color(0xFFFF5A93)),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 12),
-              HoloPanel(
-                child: Wrap(
-                  spacing: 6,
-                  runSpacing: 6,
-                  alignment: WrapAlignment.center,
-                  children: Difficulty.values.map((d) {
-                    final selected = difficulty == d;
-                    return ChoiceChip(
-                      label: Text(d.label),
-                      selected: selected,
-                      onSelected: (_) => setDifficulty(d),
-                      selectedColor: const Color(0xFF173447),
-                      backgroundColor: const Color(0xFF0B1623),
-                      side: BorderSide(
-                        color: selected
-                            ? const Color(0xFF58F3FF)
-                            : Colors.white24,
-                      ),
-                      labelStyle: TextStyle(
-                        color: selected
-                            ? const Color(0xFF58F3FF)
-                            : Colors.white70,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    );
-                  }).toList(),
-                ),
-              ),
-            ],
-          )
-        : Row(
-            children: [
-              Expanded(
-                child: HoloPanel(
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      _scoreBlock('Cyan', state.cyanScore, const Color(0xFF58F3FF)),
-                      _scoreBlock('Red', state.redScore, const Color(0xFFFF5A93)),
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              HoloPanel(
-                child: Wrap(
-                  spacing: 6,
-                  children: Difficulty.values.map((d) {
-                    final selected = difficulty == d;
-                    return ChoiceChip(
-                      label: Text(d.label),
-                      selected: selected,
-                      onSelected: (_) => setDifficulty(d),
-                      selectedColor: const Color(0xFF173447),
-                      backgroundColor: const Color(0xFF0B1623),
-                      side: BorderSide(
-                        color: selected
-                            ? const Color(0xFF58F3FF)
-                            : Colors.white24,
-                      ),
-                      labelStyle: TextStyle(
-                        color: selected
-                            ? const Color(0xFF58F3FF)
-                            : Colors.white70,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    );
-                  }).toList(),
-                ),
-              ),
-            ],
-          );
-
-    return Column(
-      children: [
-        if (compact) ...[
-          titlePanel,
-          const SizedBox(height: 12),
-          buttonRow,
-        ] else
-          Row(
-            children: [
-              Expanded(child: titlePanel),
-              const SizedBox(width: 12),
-              buttonRow,
-            ],
-          ),
-        const SizedBox(height: 12),
-        scoreDifficulty,
-      ],
-    );
   }
 
-  Widget _scoreBlock(String name, int score, Color color) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          name.toUpperCase(),
-          style: TextStyle(
-            color: color,
-            fontWeight: FontWeight.bold,
-            letterSpacing: 1.2,
-          ),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          '$score',
-          style: const TextStyle(
-            fontSize: 26,
-            fontWeight: FontWeight.w800,
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildInfoPanel() {
+  Widget _buildSidePanel() {
     return HoloPanel(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
             'Match Info',
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-            ),
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 10),
           Text('Current Turn: ${state.turn.label}'),
@@ -1009,8 +884,86 @@ class _GamePageState extends State<GamePage> {
             const SizedBox(height: 6),
             Text('Winner: ${state.winner!.label}'),
           ],
+          const SizedBox(height: 16),
+          const Text(
+            'Units',
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 10),
+          const LegendTile(
+            iconText: 'C',
+            title: 'Core',
+            subtitle: '1 square any direction',
+          ),
+          const SizedBox(height: 10),
+          const LegendTile(
+            iconText: 'L',
+            title: 'Lancer',
+            subtitle: 'Slides in straight lines',
+          ),
+          const SizedBox(height: 10),
+          const LegendTile(
+            iconText: 'B',
+            title: 'Blinker',
+            subtitle: 'Jumps in an L-shape',
+          ),
+          const SizedBox(height: 16),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              _scoreBlock('Cyan', state.cyanScore, const Color(0xFF58F3FF)),
+              _scoreBlock('Red', state.redScore, const Color(0xFFFF5A93)),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: Difficulty.values.map((d) {
+              final selectedChip = difficulty == d;
+              return ChoiceChip(
+                label: Text(d.label),
+                selected: selectedChip,
+                onSelected: (_) => setDifficulty(d),
+                selectedColor: const Color(0xFF173447),
+                backgroundColor: const Color(0xFF0B1623),
+                side: BorderSide(
+                  color: selectedChip
+                      ? const Color(0xFF58F3FF)
+                      : Colors.white24,
+                ),
+                labelStyle: TextStyle(
+                  color: selectedChip
+                      ? const Color(0xFF58F3FF)
+                      : Colors.white70,
+                  fontWeight: FontWeight.w700,
+                ),
+              );
+            }).toList(),
+          ),
         ],
       ),
+    );
+  }
+
+  Widget _scoreBlock(String name, int score, Color color) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          name.toUpperCase(),
+          style: TextStyle(
+            color: color,
+            fontWeight: FontWeight.bold,
+            letterSpacing: 1.1,
+          ),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          '$score',
+          style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w800),
+        ),
+      ],
     );
   }
 
@@ -1020,37 +973,7 @@ class _GamePageState extends State<GamePage> {
     if (piece == null) return 'None';
     return '${piece.name} at (${selected!.row}, ${selected!.col})';
   }
-
-  Widget _buildLegendPanel() {
-    return HoloPanel(
-      child: Wrap(
-        runSpacing: 10,
-        spacing: 10,
-        children: const [
-          LegendTile(
-            iconText: 'C',
-            title: 'Core',
-            subtitle: '1 square any direction',
-          ),
-          LegendTile(
-            iconText: 'L',
-            title: 'Lancer',
-            subtitle: 'Slides in straight lines',
-          ),
-          LegendTile(
-            iconText: 'B',
-            title: 'Blinker',
-            subtitle: 'Jumps in an L-shape',
-          ),
-        ],
-      ),
-    );
-  }
 }
-
-/// ===============================================================
-/// BOARD
-/// ===============================================================
 
 class GameBoard extends StatelessWidget {
   final GameState state;
@@ -1098,9 +1021,7 @@ class GameBoard extends StatelessWidget {
           ),
           child: Stack(
             children: [
-              Positioned.fill(
-                child: CustomPaint(painter: GridPainter()),
-              ),
+              Positioned.fill(child: CustomPaint(painter: GridPainter())),
               for (int r = 0; r < GameState.size; r++)
                 for (int c = 0; c < GameState.size; c++)
                   Positioned(
@@ -1109,7 +1030,6 @@ class GameBoard extends StatelessWidget {
                     width: cellSize,
                     height: cellSize,
                     child: _BoardCell(
-                      pos: BoardPos(r, c),
                       piece: state.board[r][c],
                       selected: selected == BoardPos(r, c),
                       moveTarget: isMoveTarget(BoardPos(r, c)),
@@ -1125,14 +1045,12 @@ class GameBoard extends StatelessWidget {
 }
 
 class _BoardCell extends StatelessWidget {
-  final BoardPos pos;
   final Piece? piece;
   final bool selected;
   final bool moveTarget;
   final VoidCallback onTap;
 
   const _BoardCell({
-    required this.pos,
     required this.piece,
     required this.selected,
     required this.moveTarget,
@@ -1144,8 +1062,8 @@ class _BoardCell extends StatelessWidget {
     return MouseRegion(
       cursor: SystemMouseCursors.click,
       child: GestureDetector(
-        onTap: onTap,
         behavior: HitTestBehavior.opaque,
+        onTap: onTap,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 140),
           margin: const EdgeInsets.all(5),
@@ -1187,10 +1105,7 @@ class _BoardCell extends StatelessWidget {
                     child: SizedBox(width: 14, height: 14),
                   ),
                 ),
-              if (piece != null)
-                Center(
-                  child: HoloPiece(piece: piece!),
-                ),
+              if (piece != null) Center(child: HoloPiece(piece: piece!)),
             ],
           ),
         ),
@@ -1198,10 +1113,6 @@ class _BoardCell extends StatelessWidget {
     );
   }
 }
-
-/// ===============================================================
-/// PIECE VISUALS
-/// ===============================================================
 
 class HoloPiece extends StatelessWidget {
   final Piece piece;
@@ -1226,9 +1137,7 @@ class HoloPiece extends StatelessWidget {
 class PiecePainter extends CustomPainter {
   final Piece piece;
 
-  PiecePainter({
-    required this.piece,
-  });
+  PiecePainter({required this.piece});
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -1251,9 +1160,7 @@ class PiecePainter extends CustomPainter {
           color.withOpacity(0.16),
           color.withOpacity(0.04),
         ],
-      ).createShader(
-        Rect.fromCircle(center: center, radius: size.width * 0.34),
-      );
+      ).createShader(Rect.fromCircle(center: center, radius: size.width * 0.34));
 
     canvas.drawCircle(center, size.width * 0.34, glowPaint);
     canvas.drawCircle(center, size.width * 0.30, fillPaint);
@@ -1278,18 +1185,13 @@ class PiecePainter extends CustomPainter {
           color: Colors.white.withOpacity(0.95),
           fontSize: 14,
           fontWeight: FontWeight.bold,
-          shadows: [
-            Shadow(color: color.withOpacity(0.9), blurRadius: 12),
-          ],
+          shadows: [Shadow(color: color.withOpacity(0.9), blurRadius: 12)],
         ),
       ),
       textDirection: TextDirection.ltr,
     )..layout();
 
-    tp.paint(
-      canvas,
-      Offset(center.dx - tp.width / 2, center.dy - tp.height / 2),
-    );
+    tp.paint(canvas, Offset(center.dx - tp.width / 2, center.dy - tp.height / 2));
   }
 
   void _drawCore(Canvas canvas, Size size, Color color) {
@@ -1299,7 +1201,6 @@ class PiecePainter extends CustomPainter {
       ..strokeWidth = 2;
 
     final center = size.center(Offset.zero);
-
     canvas.drawCircle(center, size.width * 0.16, p);
 
     final diamond = Path()
@@ -1319,7 +1220,6 @@ class PiecePainter extends CustomPainter {
       ..strokeWidth = 2;
 
     final center = size.center(Offset.zero);
-
     canvas.drawLine(
       Offset(center.dx, size.height * 0.14),
       Offset(center.dx, size.height * 0.86),
@@ -1331,11 +1231,7 @@ class PiecePainter extends CustomPainter {
       p,
     );
     canvas.drawRect(
-      Rect.fromCenter(
-        center: center,
-        width: size.width * 0.22,
-        height: size.height * 0.22,
-      ),
+      Rect.fromCenter(center: center, width: size.width * 0.22, height: size.height * 0.22),
       p,
     );
   }
@@ -1347,7 +1243,6 @@ class PiecePainter extends CustomPainter {
       ..strokeWidth = 2;
 
     final center = size.center(Offset.zero);
-
     final path = Path()
       ..moveTo(center.dx - size.width * 0.18, center.dy + size.height * 0.18)
       ..lineTo(center.dx - size.width * 0.18, center.dy - size.height * 0.08)
@@ -1356,11 +1251,7 @@ class PiecePainter extends CustomPainter {
       ..lineTo(center.dx + size.width * 0.20, center.dy - size.height * 0.23);
 
     canvas.drawPath(path, p);
-    canvas.drawCircle(
-      center.translate(size.width * 0.15, size.height * 0.14),
-      5,
-      p,
-    );
+    canvas.drawCircle(center.translate(size.width * 0.15, size.height * 0.14), 5, p);
   }
 
   @override
@@ -1404,10 +1295,6 @@ class GridPainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
-
-/// ===============================================================
-/// UI PANELS / BUTTONS / BACKDROP
-/// ===============================================================
 
 class HoloPanel extends StatelessWidget {
   final Widget child;
@@ -1466,7 +1353,7 @@ class HoloButton extends StatelessWidget {
         onTap: onPressed,
         borderRadius: BorderRadius.circular(16),
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(16),
             gradient: const LinearGradient(
@@ -1588,16 +1475,8 @@ class HoloBackdropPainter extends CustomPainter {
       ..color = const Color(0x1FFF5A93)
       ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 65);
 
-    canvas.drawCircle(
-      Offset(size.width * 0.18, size.height * 0.20),
-      130,
-      cyanGlow,
-    );
-    canvas.drawCircle(
-      Offset(size.width * 0.82, size.height * 0.25),
-      150,
-      redGlow,
-    );
+    canvas.drawCircle(Offset(size.width * 0.18, size.height * 0.20), 130, cyanGlow);
+    canvas.drawCircle(Offset(size.width * 0.82, size.height * 0.25), 150, redGlow);
 
     final gridLine = Paint()
       ..color = const Color(0x0F58F3FF)
