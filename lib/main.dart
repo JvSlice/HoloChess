@@ -94,6 +94,10 @@ extension GameModeX on GameMode {
   }
 }
 
+/// ===============================================================
+/// DATA MODELS
+/// ===============================================================
+
 class BoardPos {
   final int row;
   final int col;
@@ -132,25 +136,14 @@ class Piece {
     }
   }
 
-  String get name {
+  String get shortName {
     switch (type) {
       case UnitType.core:
-        return 'Core';
+        return 'Core Beast';
       case UnitType.lancer:
-        return 'Lancer';
+        return 'Lancer Beast';
       case UnitType.blinker:
-        return 'Blinker';
-    }
-  }
-
-  String get glyph {
-    switch (type) {
-      case UnitType.core:
-        return 'C';
-      case UnitType.lancer:
-        return 'L';
-      case UnitType.blinker:
-        return 'B';
+        return 'Blinker Beast';
     }
   }
 }
@@ -193,6 +186,11 @@ class GameState {
   factory GameState.initial() {
     final board = List.generate(size, (_) => List<Piece?>.filled(size, null));
 
+    // ------------------------------------------------------------
+    // Starting layout.
+    // Easy hack point:
+    // Move these pieces around to invent variants or challenge modes.
+    // ------------------------------------------------------------
     board[0][0] = const Piece(side: PlayerSide.red, type: UnitType.lancer);
     board[0][1] = const Piece(side: PlayerSide.red, type: UnitType.blinker);
     board[0][2] = const Piece(side: PlayerSide.red, type: UnitType.core);
@@ -292,6 +290,12 @@ class Rules {
   ) {
     final moves = <GameMove>[];
 
+    // ------------------------------------------------------------
+    // Core movement:
+    // 1 square in any direction.
+    // Easy hack point:
+    // expand this if you want a stronger leader piece later.
+    // ------------------------------------------------------------
     for (int dr = -1; dr <= 1; dr++) {
       for (int dc = -1; dc <= 1; dc++) {
         if (dr == 0 && dc == 0) continue;
@@ -316,6 +320,12 @@ class Rules {
   ) {
     final moves = <GameMove>[];
 
+    // ------------------------------------------------------------
+    // Lancer movement:
+    // straight-line sliding mover.
+    // Easy hack point:
+    // add diagonal directions to make a stronger variant.
+    // ------------------------------------------------------------
     const dirs = [
       [1, 0],
       [-1, 0],
@@ -355,6 +365,12 @@ class Rules {
   ) {
     final moves = <GameMove>[];
 
+    // ------------------------------------------------------------
+    // Blinker movement:
+    // leaping L-shape.
+    // Easy hack point:
+    // change offsets to create a different jump unit later.
+    // ------------------------------------------------------------
     const offsets = [
       [2, 1],
       [2, -1],
@@ -391,6 +407,7 @@ class Rules {
 
     final target = state.at(move.to);
 
+    // Capture scoring.
     if (target != null) {
       if (piece.side == PlayerSide.cyan) {
         state.cyanScore += target.value;
@@ -402,6 +419,7 @@ class Rules {
     state.set(move.to, piece);
     state.set(move.from, null);
 
+    // Win by capturing Core.
     final enemyCore = state.findCore(piece.side.opponent);
     if (enemyCore == null) {
       state.gameOver = true;
@@ -410,8 +428,10 @@ class Rules {
       return true;
     }
 
+    // Advance turn.
     state.turn = state.turn.opponent;
 
+    // Win by leaving opponent with no legal moves.
     final nextMoves = allLegalMoves(state, state.turn);
     if (nextMoves.isEmpty) {
       state.gameOver = true;
@@ -439,6 +459,7 @@ class HoloAI {
     final moves = Rules.allLegalMoves(state, PlayerSide.red);
     if (moves.isEmpty) return null;
 
+    // Easier AI intentionally makes mistakes sometimes.
     if (_random.nextDouble() < difficulty.mistakeChance) {
       return moves[_random.nextInt(moves.length)];
     }
@@ -489,10 +510,12 @@ class HoloAI {
 
     if (maximizingRed) {
       int best = -999999;
+
       for (final move in moves) {
         final next = state.clone();
         next.turn = side;
         Rules.applyMove(next, move);
+
         best = max(
           best,
           _minimax(
@@ -503,16 +526,20 @@ class HoloAI {
             beta: beta,
           ),
         );
+
         alpha = max(alpha, best);
         if (beta <= alpha) break;
       }
+
       return best;
     } else {
       int best = 999999;
+
       for (final move in moves) {
         final next = state.clone();
         next.turn = side;
         Rules.applyMove(next, move);
+
         best = min(
           best,
           _minimax(
@@ -523,9 +550,11 @@ class HoloAI {
             beta: beta,
           ),
         );
+
         beta = min(beta, best);
         if (beta <= alpha) break;
       }
+
       return best;
     }
   }
@@ -546,6 +575,7 @@ class HoloAI {
 
         final centerBias = 4 - ((r - 2).abs() + (c - 2).abs());
         int value = piece.value * 10 + centerBias;
+
         if (piece.type == UnitType.blinker) value += 2;
         if (piece.type == UnitType.lancer) value += 1;
 
@@ -578,7 +608,6 @@ class _GamePageState extends State<GamePage> {
 
   Difficulty difficulty = Difficulty.medium;
   GameMode mode = GameMode.vsAI;
-  bool useRoundBoard = true;
   bool showControls = false;
 
   BoardPos? selected;
@@ -616,17 +645,12 @@ class _GamePageState extends State<GamePage> {
     });
   }
 
-  void setBoardStyle(bool round) {
-    setState(() {
-      useRoundBoard = round;
-    });
-  }
-
   void handleTap(BoardPos pos) {
     if (state.gameOver || aiBusy) return;
 
     final piece = state.at(pos);
 
+    // Select current side's piece.
     if (piece != null && piece.side == state.turn) {
       setState(() {
         selected = pos;
@@ -635,6 +659,7 @@ class _GamePageState extends State<GamePage> {
       return;
     }
 
+    // Attempt move if something is selected.
     if (selected != null) {
       final matchingMove = selectedMoves.where((m) => m.to == pos).toList();
 
@@ -707,10 +732,10 @@ class _GamePageState extends State<GamePage> {
               'Modes:\n'
               '• VS AI: play as Cyan against Red AI\n'
               '• Local 2P: both players use the same device\n\n'
-              'Pieces:\n'
-              '• Core: moves 1 square in any direction\n'
-              '• Lancer: slides any distance horizontally or vertically\n'
-              '• Blinker: jumps in an L-shape\n\n'
+              'Beasts:\n'
+              '• Core Beast: moves 1 square in any direction\n'
+              '• Lancer Beast: slides any distance horizontally or vertically\n'
+              '• Blinker Beast: jumps in an L-shape\n\n'
               'Controls:\n'
               'Tap or click one of the current player\'s pieces, then tap/click a highlighted square to move.\n\n'
               'Scoring:\n'
@@ -766,7 +791,6 @@ class _GamePageState extends State<GamePage> {
                       selected: selected,
                       isMoveTarget: isTarget,
                       onTapCell: handleTap,
-                      useRoundBoard: useRoundBoard,
                     ),
                   ),
                 ),
@@ -807,7 +831,6 @@ class _GamePageState extends State<GamePage> {
                     selected: selected,
                     isMoveTarget: isTarget,
                     onTapCell: handleTap,
-                    useRoundBoard: useRoundBoard,
                   ),
                 );
               },
@@ -912,16 +935,6 @@ class _GamePageState extends State<GamePage> {
                 selected: mode == GameMode.local,
                 onTap: () => setMode(GameMode.local),
               ),
-              _choiceChip(
-                text: 'Round Board',
-                selected: useRoundBoard,
-                onTap: () => setBoardStyle(true),
-              ),
-              _choiceChip(
-                text: 'Square Board',
-                selected: !useRoundBoard,
-                onTap: () => setBoardStyle(false),
-              ),
             ],
           ),
           const SizedBox(height: 12),
@@ -944,8 +957,6 @@ class _GamePageState extends State<GamePage> {
           const SizedBox(height: 12),
           Text('Mode: ${mode.label}'),
           const SizedBox(height: 4),
-          Text('Board: ${useRoundBoard ? "Round" : "Square"}'),
-          const SizedBox(height: 4),
           Text('Current Turn: ${state.turn.label}'),
           const SizedBox(height: 4),
           Text('Selected: ${_selectedText()}'),
@@ -958,25 +969,25 @@ class _GamePageState extends State<GamePage> {
           if (alwaysExpanded) ...[
             const SizedBox(height: 14),
             const Text(
-              'Units',
+              'Beast Types',
               style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
             const LegendTile(
-              iconText: 'C',
-              title: 'Core',
+              iconText: '👑',
+              title: 'Core Beast',
               subtitle: '1 square any direction',
             ),
             const SizedBox(height: 8),
             const LegendTile(
-              iconText: 'L',
-              title: 'Lancer',
+              iconText: '🦴',
+              title: 'Lancer Beast',
               subtitle: 'Slides in straight lines',
             ),
             const SizedBox(height: 8),
             const LegendTile(
-              iconText: 'B',
-              title: 'Blinker',
+              iconText: '🕷',
+              title: 'Blinker Beast',
               subtitle: 'Jumps in an L-shape',
             ),
           ],
@@ -1031,7 +1042,7 @@ class _GamePageState extends State<GamePage> {
     if (selected == null) return 'None';
     final piece = state.at(selected!);
     if (piece == null) return 'None';
-    return '${piece.name} at (${selected!.row}, ${selected!.col})';
+    return '${piece.shortName} at (${selected!.row}, ${selected!.col})';
   }
 }
 
@@ -1044,7 +1055,6 @@ class GameBoard extends StatelessWidget {
   final BoardPos? selected;
   final bool Function(BoardPos) isMoveTarget;
   final void Function(BoardPos) onTapCell;
-  final bool useRoundBoard;
 
   const GameBoard({
     super.key,
@@ -1052,7 +1062,6 @@ class GameBoard extends StatelessWidget {
     required this.selected,
     required this.isMoveTarget,
     required this.onTapCell,
-    required this.useRoundBoard,
   });
 
   Widget _buildGrid(double cellSize) {
@@ -1060,7 +1069,7 @@ class GameBoard extends StatelessWidget {
       children: [
         Positioned.fill(
           child: CustomPaint(
-            painter: GridPainter(roundMode: useRoundBoard),
+            painter: GridPainter(),
           ),
         ),
         for (int r = 0; r < GameState.size; r++)
@@ -1087,41 +1096,6 @@ class GameBoard extends StatelessWidget {
       builder: (context, constraints) {
         final side = min(constraints.maxWidth, constraints.maxHeight);
         final cellSize = side / GameState.size;
-
-        if (useRoundBoard) {
-          return Stack(
-            children: [
-              Positioned.fill(
-                child: CustomPaint(
-                  painter: RoundBoardFramePainter(),
-                ),
-              ),
-              // Key idea:
-              // We do NOT clip the entire board to a circle.
-              // We keep the full square logic and full square visibility,
-              // but draw a circular frame around it.
-              Padding(
-                padding: EdgeInsets.all(side * 0.06),
-                child: Container(
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(18),
-                    border: Border.all(color: const Color(0x6658F3FF), width: 1.5),
-                    gradient: const LinearGradient(
-                      colors: [
-                        Color(0x2200E7FF),
-                        Color(0x1100E7FF),
-                        Color(0x2200E7FF),
-                      ],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
-                  ),
-                  child: _buildGrid(cellSize * 0.88),
-                ),
-              ),
-            ],
-          );
-        }
 
         return Container(
           width: side,
@@ -1224,7 +1198,7 @@ class _BoardCell extends StatelessWidget {
 }
 
 /// ===============================================================
-/// PIECE VISUALS
+/// MONSTER / BEAST TOKENS
 /// ===============================================================
 
 class HoloPiece extends StatelessWidget {
@@ -1238,28 +1212,35 @@ class HoloPiece extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      width: 48,
-      height: 48,
+      width: 52,
+      height: 52,
       child: CustomPaint(
-        painter: PiecePainter(piece: piece),
+        painter: BeastPiecePainter(piece: piece),
       ),
     );
   }
 }
 
-class PiecePainter extends CustomPainter {
+class BeastPiecePainter extends CustomPainter {
   final Piece piece;
 
-  PiecePainter({required this.piece});
+  BeastPiecePainter({required this.piece});
 
   @override
   void paint(Canvas canvas, Size size) {
     final color = piece.side.color;
     final center = size.center(Offset.zero);
 
+    // ------------------------------------------------------------
+    // Shared holographic base for all monster tokens.
+    // Easy hack point:
+    // - change circle size
+    // - increase glow
+    // - swap to hex / diamond / shield base
+    // ------------------------------------------------------------
     final glowPaint = Paint()
-      ..color = color.withOpacity(0.18)
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 10);
+      ..color = color.withOpacity(0.16)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 12);
 
     final ringPaint = Paint()
       ..color = color.withOpacity(0.95)
@@ -1269,120 +1250,235 @@ class PiecePainter extends CustomPainter {
     final fillPaint = Paint()
       ..shader = RadialGradient(
         colors: [
-          color.withOpacity(0.48),
-          color.withOpacity(0.16),
-          color.withOpacity(0.04),
+          color.withOpacity(0.34),
+          color.withOpacity(0.14),
+          color.withOpacity(0.03),
         ],
       ).createShader(Rect.fromCircle(center: center, radius: size.width * 0.34));
 
     canvas.drawCircle(center, size.width * 0.34, glowPaint);
-    canvas.drawCircle(center, size.width * 0.30, fillPaint);
-    canvas.drawCircle(center, size.width * 0.30, ringPaint);
+    canvas.drawCircle(center, size.width * 0.31, fillPaint);
+    canvas.drawCircle(center, size.width * 0.31, ringPaint);
 
+    // ------------------------------------------------------------
+    // Piece-specific creature silhouette.
+    // ------------------------------------------------------------
     switch (piece.type) {
       case UnitType.core:
-        _drawCore(canvas, size, color);
+        _drawCoreBeast(canvas, size, color);
         break;
       case UnitType.lancer:
-        _drawLancer(canvas, size, color);
+        _drawLancerBeast(canvas, size, color);
         break;
       case UnitType.blinker:
-        _drawBlinker(canvas, size, color);
+        _drawBlinkerBeast(canvas, size, color);
         break;
     }
 
-    final tp = TextPainter(
-      text: TextSpan(
-        text: piece.glyph,
-        style: TextStyle(
-          color: Colors.white.withOpacity(0.95),
-          fontSize: 13,
-          fontWeight: FontWeight.bold,
-          shadows: [Shadow(color: color.withOpacity(0.9), blurRadius: 12)],
-        ),
-      ),
-      textDirection: TextDirection.ltr,
-    )..layout();
-
-    tp.paint(canvas, Offset(center.dx - tp.width / 2, center.dy - tp.height / 2));
+    _drawEyes(canvas, size, color);
   }
 
-  void _drawCore(Canvas canvas, Size size, Color color) {
-    final p = Paint()
-      ..color = color.withOpacity(0.92)
+  void _drawCoreBeast(Canvas canvas, Size size, Color color) {
+    // ------------------------------------------------------------
+    // Core Beast:
+    // Think crowned skull / hive queen / boss creature.
+    // Easy hack point:
+    // exaggerate horns or add a lower jaw / tentacles.
+    // ------------------------------------------------------------
+    final line = Paint()
+      ..color = color.withOpacity(0.94)
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 2;
+      ..strokeWidth = 2.0;
 
     final center = size.center(Offset.zero);
-    canvas.drawCircle(center, size.width * 0.16, p);
 
-    final diamond = Path()
-      ..moveTo(center.dx, center.dy - size.height * 0.22)
-      ..lineTo(center.dx + size.width * 0.22, center.dy)
-      ..lineTo(center.dx, center.dy + size.height * 0.22)
-      ..lineTo(center.dx - size.width * 0.22, center.dy)
+    final crown = Path()
+      ..moveTo(center.dx - size.width * 0.18, center.dy - size.height * 0.02)
+      ..lineTo(center.dx - size.width * 0.28, center.dy - size.height * 0.20)
+      ..lineTo(center.dx - size.width * 0.12, center.dy - size.height * 0.14)
+      ..lineTo(center.dx, center.dy - size.height * 0.26)
+      ..lineTo(center.dx + size.width * 0.12, center.dy - size.height * 0.14)
+      ..lineTo(center.dx + size.width * 0.28, center.dy - size.height * 0.20)
+      ..lineTo(center.dx + size.width * 0.18, center.dy - size.height * 0.02);
+
+    final head = Path()
+      ..moveTo(center.dx - size.width * 0.18, center.dy - size.height * 0.02)
+      ..quadraticBezierTo(
+        center.dx - size.width * 0.20,
+        center.dy + size.height * 0.14,
+        center.dx - size.width * 0.08,
+        center.dy + size.height * 0.22,
+      )
+      ..lineTo(center.dx - size.width * 0.04, center.dy + size.height * 0.08)
+      ..lineTo(center.dx + size.width * 0.04, center.dy + size.height * 0.08)
+      ..lineTo(center.dx + size.width * 0.08, center.dy + size.height * 0.22)
+      ..quadraticBezierTo(
+        center.dx + size.width * 0.20,
+        center.dy + size.height * 0.14,
+        center.dx + size.width * 0.18,
+        center.dy - size.height * 0.02,
+      );
+
+    canvas.drawPath(crown, line);
+    canvas.drawPath(head, line);
+
+    canvas.drawLine(
+      Offset(center.dx - size.width * 0.09, center.dy + size.height * 0.10),
+      Offset(center.dx + size.width * 0.09, center.dy + size.height * 0.10),
+      line,
+    );
+  }
+
+  void _drawLancerBeast(Canvas canvas, Size size, Color color) {
+    // ------------------------------------------------------------
+    // Lancer Beast:
+    // Think horned charger / fang spear / armored predator.
+    // Easy hack point:
+    // widen the horns or turn it into a dragon-head silhouette.
+    // ------------------------------------------------------------
+    final line = Paint()
+      ..color = color.withOpacity(0.94)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.0;
+
+    final center = size.center(Offset.zero);
+
+    final snout = Path()
+      ..moveTo(center.dx, center.dy - size.height * 0.24)
+      ..lineTo(center.dx + size.width * 0.10, center.dy - size.height * 0.02)
+      ..lineTo(center.dx, center.dy + size.height * 0.20)
+      ..lineTo(center.dx - size.width * 0.10, center.dy - size.height * 0.02)
       ..close();
 
-    canvas.drawPath(diamond, p);
-  }
-
-  void _drawLancer(Canvas canvas, Size size, Color color) {
-    final p = Paint()
-      ..color = color.withOpacity(0.92)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 2;
-
-    final center = size.center(Offset.zero);
     canvas.drawLine(
-      Offset(center.dx, size.height * 0.14),
-      Offset(center.dx, size.height * 0.86),
-      p,
+      Offset(center.dx - size.width * 0.05, center.dy - size.height * 0.08),
+      Offset(center.dx - size.width * 0.24, center.dy - size.height * 0.20),
+      line,
     );
     canvas.drawLine(
-      Offset(size.width * 0.22, center.dy),
-      Offset(size.width * 0.78, center.dy),
-      p,
+      Offset(center.dx + size.width * 0.05, center.dy - size.height * 0.08),
+      Offset(center.dx + size.width * 0.24, center.dy - size.height * 0.20),
+      line,
     );
-    canvas.drawRect(
-      Rect.fromCenter(center: center, width: size.width * 0.22, height: size.height * 0.22),
-      p,
+
+    canvas.drawLine(
+      Offset(center.dx - size.width * 0.06, center.dy + size.height * 0.08),
+      Offset(center.dx - size.width * 0.18, center.dy + size.height * 0.24),
+      line,
+    );
+    canvas.drawLine(
+      Offset(center.dx + size.width * 0.06, center.dy + size.height * 0.08),
+      Offset(center.dx + size.width * 0.18, center.dy + size.height * 0.24),
+      line,
+    );
+
+    canvas.drawPath(snout, line);
+
+    canvas.drawLine(
+      Offset(center.dx, center.dy - size.height * 0.24),
+      Offset(center.dx, center.dy + size.height * 0.22),
+      line,
     );
   }
 
-  void _drawBlinker(Canvas canvas, Size size, Color color) {
-    final p = Paint()
-      ..color = color.withOpacity(0.92)
+  void _drawBlinkerBeast(Canvas canvas, Size size, Color color) {
+    // ------------------------------------------------------------
+    // Blinker Beast:
+    // Think spider / leaper / skittering alien horror.
+    // Easy hack point:
+    // add more legs, make body longer, or add tail stinger.
+    // ------------------------------------------------------------
+    final line = Paint()
+      ..color = color.withOpacity(0.94)
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 2;
+      ..strokeWidth = 2.0;
 
     final center = size.center(Offset.zero);
-    final path = Path()
-      ..moveTo(center.dx - size.width * 0.18, center.dy + size.height * 0.18)
-      ..lineTo(center.dx - size.width * 0.18, center.dy - size.height * 0.08)
-      ..lineTo(center.dx + size.width * 0.05, center.dy - size.height * 0.08)
-      ..lineTo(center.dx + size.width * 0.05, center.dy - size.height * 0.23)
-      ..lineTo(center.dx + size.width * 0.20, center.dy - size.height * 0.23);
 
-    canvas.drawPath(path, p);
-    canvas.drawCircle(center.translate(size.width * 0.15, size.height * 0.14), 4.5, p);
+    canvas.drawOval(
+      Rect.fromCenter(
+        center: center,
+        width: size.width * 0.24,
+        height: size.height * 0.18,
+      ),
+      line,
+    );
+
+    canvas.drawCircle(
+      center.translate(0, -size.height * 0.15),
+      size.width * 0.07,
+      line,
+    );
+
+    final legs = [
+      [
+        Offset(center.dx - size.width * 0.08, center.dy - size.height * 0.03),
+        Offset(center.dx - size.width * 0.24, center.dy - size.height * 0.16),
+      ],
+      [
+        Offset(center.dx - size.width * 0.10, center.dy + size.height * 0.02),
+        Offset(center.dx - size.width * 0.26, center.dy + size.height * 0.02),
+      ],
+      [
+        Offset(center.dx - size.width * 0.08, center.dy + size.height * 0.07),
+        Offset(center.dx - size.width * 0.24, center.dy + size.height * 0.18),
+      ],
+      [
+        Offset(center.dx + size.width * 0.08, center.dy - size.height * 0.03),
+        Offset(center.dx + size.width * 0.24, center.dy - size.height * 0.16),
+      ],
+      [
+        Offset(center.dx + size.width * 0.10, center.dy + size.height * 0.02),
+        Offset(center.dx + size.width * 0.26, center.dy + size.height * 0.02),
+      ],
+      [
+        Offset(center.dx + size.width * 0.08, center.dy + size.height * 0.07),
+        Offset(center.dx + size.width * 0.24, center.dy + size.height * 0.18),
+      ],
+    ];
+
+    for (final leg in legs) {
+      canvas.drawLine(leg[0], leg[1], line);
+    }
+  }
+
+  void _drawEyes(Canvas canvas, Size size, Color color) {
+    // ------------------------------------------------------------
+    // Shared eye glow.
+    // Easy hack point:
+    // move eyes per piece type, or make red/green eye colors.
+    // ------------------------------------------------------------
+    final center = size.center(Offset.zero);
+
+    final eyeFill = Paint()
+      ..color = Colors.white.withOpacity(0.95)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2);
+
+    final eyeGlow = Paint()
+      ..color = color.withOpacity(0.60)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6);
+
+    final leftEye = center.translate(-size.width * 0.06, -size.height * 0.05);
+    final rightEye = center.translate(size.width * 0.06, -size.height * 0.05);
+
+    canvas.drawCircle(leftEye, 2.5, eyeGlow);
+    canvas.drawCircle(rightEye, 2.5, eyeGlow);
+    canvas.drawCircle(leftEye, 1.4, eyeFill);
+    canvas.drawCircle(rightEye, 1.4, eyeFill);
   }
 
   @override
-  bool shouldRepaint(covariant PiecePainter oldDelegate) {
+  bool shouldRepaint(covariant BeastPiecePainter oldDelegate) {
     return oldDelegate.piece.side != piece.side ||
         oldDelegate.piece.type != piece.type;
   }
 }
 
 /// ===============================================================
-/// BOARD PAINTERS
+/// BOARD PAINTER
 /// ===============================================================
 
 class GridPainter extends CustomPainter {
-  final bool roundMode;
-
-  GridPainter({required this.roundMode});
-
   @override
   void paint(Canvas canvas, Size size) {
     final glow = Paint()
@@ -1406,7 +1502,7 @@ class GridPainter extends CustomPainter {
 
     final center = size.center(Offset.zero);
     final centerRing = Paint()
-      ..color = roundMode ? const Color(0x8858F3FF) : const Color(0x4458F3FF)
+      ..color = const Color(0x4458F3FF)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.5;
 
@@ -1414,60 +1510,7 @@ class GridPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant GridPainter oldDelegate) {
-    return oldDelegate.roundMode != roundMode;
-  }
-}
-
-class RoundBoardFramePainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final center = size.center(Offset.zero);
-    final radius = size.width / 2;
-
-    final outerGlow = Paint()
-      ..color = const Color(0x3358F3FF)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 10
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 16);
-
-    final outerRing = Paint()
-      ..color = const Color(0xAA58F3FF)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 2;
-
-    final innerRing = Paint()
-      ..color = const Color(0x6658F3FF)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.4;
-
-    final radialFill = Paint()
-      ..shader = const RadialGradient(
-        colors: [
-          Color(0x2200E7FF),
-          Color(0x1200E7FF),
-          Color(0x0400E7FF),
-        ],
-      ).createShader(Rect.fromCircle(center: center, radius: radius));
-
-    canvas.drawCircle(center, radius * 0.98, radialFill);
-    canvas.drawCircle(center, radius * 0.98, outerGlow);
-    canvas.drawCircle(center, radius * 0.98, outerRing);
-    canvas.drawCircle(center, radius * 0.82, innerRing);
-
-    final arcPaint = Paint()
-      ..color = const Color(0x8858F3FF)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.6;
-
-    final arcRect = Rect.fromCircle(center: center, radius: radius * 0.90);
-    canvas.drawArc(arcRect, 0.35, 0.9, false, arcPaint);
-    canvas.drawArc(arcRect, 2.15, 0.9, false, arcPaint);
-    canvas.drawArc(arcRect, 4.05, 0.9, false, arcPaint);
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+  bool shouldRepaint(covariant GridPainter oldDelegate) => false;
 }
 
 /// ===============================================================
@@ -1580,7 +1623,7 @@ class LegendTile extends StatelessWidget {
           child: Center(
             child: Text(
               iconText,
-              style: const TextStyle(fontWeight: FontWeight.bold),
+              style: const TextStyle(fontSize: 16),
             ),
           ),
         ),
