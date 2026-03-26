@@ -1,4 +1,4 @@
-import 'dart:math';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 void main() {
@@ -27,16 +27,41 @@ class DejairkApp extends StatelessWidget {
 }
 
 /// ===============================================================
-/// GAME TYPES
+/// VERSION NOTE
+/// Change this when you push meaningful gameplay updates.
+/// Visible in the UI so you can confirm deploys.
+/// ===============================================================
+const String gameVersion = 'v0.5.0-round-combat';
+
+/// ===============================================================
+/// CORE ENUMS
 /// ===============================================================
 
 enum PlayerSide { cyan, red }
 
-enum UnitType { core, lancer, blinker }
-
 enum Difficulty { easy, medium, hard }
 
 enum GameMode { vsAI, local }
+
+enum UnitType {
+  brute,
+  striker,
+  mystic,
+  tentacle,
+}
+
+enum TurnAction {
+  moveAttack,
+  attackOnly,
+  moveAbility,
+}
+
+enum InteractionPhase {
+  idle,
+  choosingMove,
+  choosingAttackTarget,
+  choosingAbilityMove,
+}
 
 extension PlayerSideX on PlayerSide {
   PlayerSide get opponent =>
@@ -60,25 +85,14 @@ extension DifficultyX on Difficulty {
     }
   }
 
-  int get searchDepth {
+  double get randomMistakeChance {
     switch (this) {
       case Difficulty.easy:
-        return 1;
+        return 0.32;
       case Difficulty.medium:
-        return 2;
+        return 0.12;
       case Difficulty.hard:
-        return 3;
-    }
-  }
-
-  double get mistakeChance {
-    switch (this) {
-      case Difficulty.easy:
-        return 0.35;
-      case Difficulty.medium:
-        return 0.14;
-      case Difficulty.hard:
-        return 0.05;
+        return 0.03;
     }
   }
 }
@@ -94,506 +108,626 @@ extension GameModeX on GameMode {
   }
 }
 
+extension TurnActionX on TurnAction {
+  String get label {
+    switch (this) {
+      case TurnAction.moveAttack:
+        return 'Move + Attack';
+      case TurnAction.attackOnly:
+        return 'Attack Only';
+      case TurnAction.moveAbility:
+        return 'Move + Ability';
+    }
+  }
+}
+
 /// ===============================================================
-/// DATA MODELS
+/// ROUND BOARD POSITION
+/// ring   = distance from center
+/// sector = slice around the circle
 /// ===============================================================
 
 class BoardPos {
-  final int row;
-  final int col;
+  final int ring;
+  final int sector;
 
-  const BoardPos(this.row, this.col);
-
-  bool inside(int size) => row >= 0 && row < size && col >= 0 && col < size;
+  const BoardPos(this.ring, this.sector);
 
   @override
   bool operator ==(Object other) =>
-      other is BoardPos && other.row == row && other.col == col;
+      other is BoardPos && other.ring == ring && other.sector == sector;
 
   @override
-  int get hashCode => Object.hash(row, col);
+  int get hashCode => Object.hash(ring, sector);
+
+  @override
+  String toString() => '($ring,$sector)';
 }
 
-class Piece {
-  final PlayerSide side;
+/// ===============================================================
+/// UNIT DATA
+/// Main balance point:
+/// hp / atk / range / move
+/// ===============================================================
+
+class Unit {
+  final String id;
+  final PlayerSide owner;
   final UnitType type;
 
-  const Piece({
-    required this.side,
+  int hp;
+  final int maxHp;
+  final int atk;
+  final int range;
+  final int move;
+
+  Unit({
+    required this.id,
+    required this.owner,
     required this.type,
+    required this.hp,
+    required this.maxHp,
+    required this.atk,
+    required this.range,
+    required this.move,
   });
 
-  Piece copy() => Piece(side: side, type: type);
-
-  int get value {
-    switch (type) {
-      case UnitType.core:
-        return 100;
-      case UnitType.lancer:
-        return 9;
-      case UnitType.blinker:
-        return 5;
-    }
+  Unit copy() {
+    return Unit(
+      id: id,
+      owner: owner,
+      type: type,
+      hp: hp,
+      maxHp: maxHp,
+      atk: atk,
+      range: range,
+      move: move,
+    );
   }
+
+  bool get isAlive => hp > 0;
 
   String get shortName {
     switch (type) {
-      case UnitType.core:
-        return 'Core Beast';
-      case UnitType.lancer:
-        return 'Lancer Beast';
-      case UnitType.blinker:
-        return 'Blinker Beast';
+      case UnitType.brute:
+        return 'Brute';
+      case UnitType.striker:
+        return 'Striker';
+      case UnitType.mystic:
+        return 'Mystic';
+      case UnitType.tentacle:
+        return 'Tentacle';
     }
   }
-}
 
-class GameMove {
-  final BoardPos from;
-  final BoardPos to;
+  String get abilityName {
+    switch (type) {
+      case UnitType.brute:
+        return 'Shockwave';
+      case UnitType.striker:
+        return 'Sprint';
+      case UnitType.mystic:
+        return 'Heal';
+      case UnitType.tentacle:
+        return 'Beam Lash';
+    }
+  }
 
-  const GameMove({
-    required this.from,
-    required this.to,
-  });
+  static Unit make(PlayerSide owner, UnitType type, int serial) {
+    switch (type) {
+      case UnitType.brute:
+        return Unit(
+          id: '${owner.name}_brute_$serial',
+          owner: owner,
+          type: type,
+          hp: 8,
+          maxHp: 8,
+          atk: 3,
+          range: 1,
+          move: 1,
+        );
+      case UnitType.striker:
+        return Unit(
+          id: '${owner.name}_striker_$serial',
+          owner: owner,
+          type: type,
+          hp: 5,
+          maxHp: 5,
+          atk: 2,
+          range: 1,
+          move: 2,
+        );
+      case UnitType.mystic:
+        return Unit(
+          id: '${owner.name}_mystic_$serial',
+          owner: owner,
+          type: type,
+          hp: 6,
+          maxHp: 6,
+          atk: 2,
+          range: 2,
+          move: 1,
+        );
+      case UnitType.tentacle:
+        return Unit(
+          id: '${owner.name}_tentacle_$serial',
+          owner: owner,
+          type: type,
+          hp: 5,
+          maxHp: 5,
+          atk: 2,
+          range: 2,
+          move: 1,
+        );
+    }
+  }
 }
 
 /// ===============================================================
 /// GAME STATE
+/// Board shape:
+/// 3 rings x 8 sectors = 24 spaces
+/// Easy hack point:
+/// change ringCount / sectorCount to grow the board
 /// ===============================================================
 
 class GameState {
-  static const int size = 5;
+  static const int ringCount = 3;
+  static const int sectorCount = 8;
 
-  List<List<Piece?>> board;
+  final Map<BoardPos, Unit> units;
   PlayerSide turn;
-  int cyanScore;
-  int redScore;
+  String status;
   bool gameOver;
   PlayerSide? winner;
-  String status;
+  int cyanScore;
+  int redScore;
 
   GameState({
-    required this.board,
+    required this.units,
     required this.turn,
-    required this.cyanScore,
-    required this.redScore,
+    required this.status,
     required this.gameOver,
     required this.winner,
-    required this.status,
+    required this.cyanScore,
+    required this.redScore,
   });
 
   factory GameState.initial() {
-    final board = List.generate(size, (_) => List<Piece?>.filled(size, null));
+    final units = <BoardPos, Unit>{};
 
-    // ------------------------------------------------------------
-    // Starting layout.
-    // Easy hack point:
-    // Move these pieces around to invent variants or challenge modes.
-    // ------------------------------------------------------------
-    board[0][0] = const Piece(side: PlayerSide.red, type: UnitType.lancer);
-    board[0][1] = const Piece(side: PlayerSide.red, type: UnitType.blinker);
-    board[0][2] = const Piece(side: PlayerSide.red, type: UnitType.core);
-    board[0][3] = const Piece(side: PlayerSide.red, type: UnitType.blinker);
-    board[0][4] = const Piece(side: PlayerSide.red, type: UnitType.lancer);
+    // Cyan side
+    units[const BoardPos(2, 7)] = Unit.make(PlayerSide.cyan, UnitType.brute, 0);
+    units[const BoardPos(2, 0)] = Unit.make(PlayerSide.cyan, UnitType.striker, 0);
+    units[const BoardPos(2, 1)] = Unit.make(PlayerSide.cyan, UnitType.mystic, 0);
+    units[const BoardPos(1, 0)] = Unit.make(PlayerSide.cyan, UnitType.tentacle, 0);
 
-    board[4][0] = const Piece(side: PlayerSide.cyan, type: UnitType.lancer);
-    board[4][1] = const Piece(side: PlayerSide.cyan, type: UnitType.blinker);
-    board[4][2] = const Piece(side: PlayerSide.cyan, type: UnitType.core);
-    board[4][3] = const Piece(side: PlayerSide.cyan, type: UnitType.blinker);
-    board[4][4] = const Piece(side: PlayerSide.cyan, type: UnitType.lancer);
+    // Red side
+    units[const BoardPos(2, 3)] = Unit.make(PlayerSide.red, UnitType.brute, 0);
+    units[const BoardPos(2, 4)] = Unit.make(PlayerSide.red, UnitType.striker, 0);
+    units[const BoardPos(2, 5)] = Unit.make(PlayerSide.red, UnitType.mystic, 0);
+    units[const BoardPos(1, 4)] = Unit.make(PlayerSide.red, UnitType.tentacle, 0);
 
     return GameState(
-      board: board,
+      units: units,
       turn: PlayerSide.cyan,
-      cyanScore: 0,
-      redScore: 0,
+      status: 'Cyan to move',
       gameOver: false,
       winner: null,
-      status: 'Cyan to move',
+      cyanScore: 0,
+      redScore: 0,
     );
   }
 
-  GameState clone() {
+  GameState copy() {
+    final copiedUnits = <BoardPos, Unit>{};
+    for (final entry in units.entries) {
+      copiedUnits[entry.key] = entry.value.copy();
+    }
+
     return GameState(
-      board: List.generate(
-        size,
-        (r) => List.generate(size, (c) => board[r][c]?.copy()),
-      ),
+      units: copiedUnits,
       turn: turn,
-      cyanScore: cyanScore,
-      redScore: redScore,
+      status: status,
       gameOver: gameOver,
       winner: winner,
-      status: status,
+      cyanScore: cyanScore,
+      redScore: redScore,
     );
   }
 
-  Piece? at(BoardPos pos) => board[pos.row][pos.col];
+  Unit? unitAt(BoardPos pos) => units[pos];
 
-  void set(BoardPos pos, Piece? piece) {
-    board[pos.row][pos.col] = piece;
-  }
+  bool isOccupied(BoardPos pos) => units.containsKey(pos);
 
-  BoardPos? findCore(PlayerSide side) {
-    for (int r = 0; r < size; r++) {
-      for (int c = 0; c < size; c++) {
-        final piece = board[r][c];
-        if (piece != null && piece.side == side && piece.type == UnitType.core) {
-          return BoardPos(r, c);
-        }
-      }
-    }
-    return null;
+  List<MapEntry<BoardPos, Unit>> unitsFor(PlayerSide side) {
+    return units.entries.where((e) => e.value.owner == side).toList();
   }
 }
 
 /// ===============================================================
-/// RULES
+/// ROUND BOARD RULES
 /// ===============================================================
 
 class Rules {
-  static List<GameMove> allLegalMoves(GameState state, PlayerSide side) {
-    final result = <GameMove>[];
+  static int wrapSector(int sector) {
+    return (sector % GameState.sectorCount + GameState.sectorCount) %
+        GameState.sectorCount;
+  }
 
-    for (int r = 0; r < GameState.size; r++) {
-      for (int c = 0; c < GameState.size; c++) {
-        final from = BoardPos(r, c);
-        final piece = state.at(from);
-        if (piece != null && piece.side == side) {
-          result.addAll(movesForPiece(state, from));
+  static List<BoardPos> adjacent(BoardPos pos) {
+    final result = <BoardPos>[
+      BoardPos(pos.ring, wrapSector(pos.sector + 1)),
+      BoardPos(pos.ring, wrapSector(pos.sector - 1)),
+    ];
+
+    if (pos.ring > 0) {
+      result.add(BoardPos(pos.ring - 1, pos.sector));
+    }
+    if (pos.ring < GameState.ringCount - 1) {
+      result.add(BoardPos(pos.ring + 1, pos.sector));
+    }
+
+    return result;
+  }
+
+  static int distance(BoardPos start, BoardPos target) {
+    if (start == target) return 0;
+
+    final queue = <BoardPos>[start];
+    final dist = <BoardPos, int>{start: 0};
+
+    while (queue.isNotEmpty) {
+      final current = queue.removeAt(0);
+      final currentDist = dist[current]!;
+      for (final next in adjacent(current)) {
+        if (!dist.containsKey(next)) {
+          dist[next] = currentDist + 1;
+          if (next == target) return dist[next]!;
+          queue.add(next);
         }
+      }
+    }
+
+    return 999;
+  }
+
+  static List<BoardPos> reachableMoves(
+    GameState state,
+    BoardPos start,
+    Unit unit, {
+    int? overrideMove,
+  }) {
+    final moveValue = overrideMove ?? unit.move;
+    final visited = <BoardPos, int>{start: 0};
+    final queue = <BoardPos>[start];
+    final result = <BoardPos>{};
+
+    while (queue.isNotEmpty) {
+      final current = queue.removeAt(0);
+      final currentDist = visited[current]!;
+
+      if (currentDist >= moveValue) continue;
+
+      for (final next in adjacent(current)) {
+        if (state.isOccupied(next)) continue;
+        if (visited.containsKey(next)) continue;
+
+        visited[next] = currentDist + 1;
+        result.add(next);
+        queue.add(next);
+      }
+    }
+
+    return result.toList();
+  }
+
+  static List<BoardPos> enemiesInRange(
+    GameState state,
+    BoardPos from,
+    Unit attacker, {
+    int? overrideRange,
+  }) {
+    final attackRange = overrideRange ?? attacker.range;
+    final result = <BoardPos>[];
+
+    for (final entry in state.units.entries) {
+      if (entry.value.owner == attacker.owner) continue;
+      if (distance(from, entry.key) <= attackRange) {
+        result.add(entry.key);
       }
     }
 
     return result;
   }
 
-  static List<GameMove> movesForPiece(GameState state, BoardPos from) {
-    final piece = state.at(from);
-    if (piece == null) return [];
-
-    switch (piece.type) {
-      case UnitType.core:
-        return _coreMoves(state, from, piece.side);
-      case UnitType.lancer:
-        return _lancerMoves(state, from, piece.side);
-      case UnitType.blinker:
-        return _blinkerMoves(state, from, piece.side);
-    }
-  }
-
-  static List<GameMove> _coreMoves(
+  static void applyDamage(
     GameState state,
-    BoardPos from,
-    PlayerSide side,
+    Unit attacker,
+    BoardPos defenderPos,
+    int damage,
   ) {
-    final moves = <GameMove>[];
+    final defender = state.unitAt(defenderPos);
+    if (defender == null) return;
 
-    // ------------------------------------------------------------
-    // Core movement:
-    // 1 square in any direction.
-    // Easy hack point:
-    // expand this if you want a stronger leader piece later.
-    // ------------------------------------------------------------
-    for (int dr = -1; dr <= 1; dr++) {
-      for (int dc = -1; dc <= 1; dc++) {
-        if (dr == 0 && dc == 0) continue;
+    defender.hp -= damage;
 
-        final to = BoardPos(from.row + dr, from.col + dc);
-        if (!to.inside(GameState.size)) continue;
+    if (defender.hp <= 0) {
+      state.units.remove(defenderPos);
 
-        final target = state.at(to);
-        if (target == null || target.side != side) {
-          moves.add(GameMove(from: from, to: to));
-        }
-      }
-    }
-
-    return moves;
-  }
-
-  static List<GameMove> _lancerMoves(
-    GameState state,
-    BoardPos from,
-    PlayerSide side,
-  ) {
-    final moves = <GameMove>[];
-
-    // ------------------------------------------------------------
-    // Lancer movement:
-    // straight-line sliding mover.
-    // Easy hack point:
-    // add diagonal directions to make a stronger variant.
-    // ------------------------------------------------------------
-    const dirs = [
-      [1, 0],
-      [-1, 0],
-      [0, 1],
-      [0, -1],
-    ];
-
-    for (final dir in dirs) {
-      int r = from.row + dir[0];
-      int c = from.col + dir[1];
-
-      while (BoardPos(r, c).inside(GameState.size)) {
-        final to = BoardPos(r, c);
-        final target = state.at(to);
-
-        if (target == null) {
-          moves.add(GameMove(from: from, to: to));
-        } else {
-          if (target.side != side) {
-            moves.add(GameMove(from: from, to: to));
-          }
-          break;
-        }
-
-        r += dir[0];
-        c += dir[1];
-      }
-    }
-
-    return moves;
-  }
-
-  static List<GameMove> _blinkerMoves(
-    GameState state,
-    BoardPos from,
-    PlayerSide side,
-  ) {
-    final moves = <GameMove>[];
-
-    // ------------------------------------------------------------
-    // Blinker movement:
-    // leaping L-shape.
-    // Easy hack point:
-    // change offsets to create a different jump unit later.
-    // ------------------------------------------------------------
-    const offsets = [
-      [2, 1],
-      [2, -1],
-      [-2, 1],
-      [-2, -1],
-      [1, 2],
-      [1, -2],
-      [-1, 2],
-      [-1, -2],
-    ];
-
-    for (final offset in offsets) {
-      final to = BoardPos(from.row + offset[0], from.col + offset[1]);
-      if (!to.inside(GameState.size)) continue;
-
-      final target = state.at(to);
-      if (target == null || target.side != side) {
-        moves.add(GameMove(from: from, to: to));
-      }
-    }
-
-    return moves;
-  }
-
-  static bool applyMove(GameState state, GameMove move) {
-    if (state.gameOver) return false;
-
-    final piece = state.at(move.from);
-    if (piece == null) return false;
-    if (piece.side != state.turn) return false;
-
-    final legalMoves = movesForPiece(state, move.from);
-    if (!legalMoves.any((m) => m.to == move.to)) return false;
-
-    final target = state.at(move.to);
-
-    // Capture scoring.
-    if (target != null) {
-      if (piece.side == PlayerSide.cyan) {
-        state.cyanScore += target.value;
+      if (attacker.owner == PlayerSide.cyan) {
+        state.cyanScore += defender.maxHp + defender.atk;
       } else {
-        state.redScore += target.value;
+        state.redScore += defender.maxHp + defender.atk;
       }
     }
+  }
 
-    state.set(move.to, piece);
-    state.set(move.from, null);
+  static void moveUnit(GameState state, BoardPos from, BoardPos to) {
+    final unit = state.unitAt(from);
+    if (unit == null) return;
+    state.units.remove(from);
+    state.units[to] = unit;
+  }
 
-    // Win by capturing Core.
-    final enemyCore = state.findCore(piece.side.opponent);
-    if (enemyCore == null) {
+  static void endTurn(GameState state) {
+    if (state.gameOver) return;
+
+    final cyanAlive = state.units.values.where((u) => u.owner == PlayerSide.cyan);
+    final redAlive = state.units.values.where((u) => u.owner == PlayerSide.red);
+
+    if (cyanAlive.isEmpty) {
       state.gameOver = true;
-      state.winner = piece.side;
-      state.status = '${piece.side.label} wins by capturing the Core!';
-      return true;
+      state.winner = PlayerSide.red;
+      state.status = 'Red wins!';
+      return;
     }
 
-    // Advance turn.
+    if (redAlive.isEmpty) {
+      state.gameOver = true;
+      state.winner = PlayerSide.cyan;
+      state.status = 'Cyan wins!';
+      return;
+    }
+
     state.turn = state.turn.opponent;
-
-    // Win by leaving opponent with no legal moves.
-    final nextMoves = allLegalMoves(state, state.turn);
-    if (nextMoves.isEmpty) {
-      state.gameOver = true;
-      state.winner = piece.side;
-      state.status = '${piece.side.label} wins: opponent has no legal moves!';
-      return true;
-    }
-
     state.status = '${state.turn.label} to move';
-    return true;
+  }
+
+  static void performAbility(
+    GameState state,
+    BoardPos origin,
+    BoardPos destination,
+    Unit unit,
+  ) {
+    moveUnit(state, origin, destination);
+
+    switch (unit.type) {
+      case UnitType.brute:
+        for (final pos in adjacent(destination)) {
+          final target = state.unitAt(pos);
+          if (target != null && target.owner != unit.owner) {
+            applyDamage(state, unit, pos, 1);
+          }
+        }
+        break;
+
+      case UnitType.striker:
+        // Sprint effect is handled by giving +1 move in UI.
+        break;
+
+      case UnitType.mystic:
+        unit.hp = math.min(unit.maxHp, unit.hp + 2);
+        break;
+
+      case UnitType.tentacle:
+        final targets = enemiesInRange(state, destination, unit, overrideRange: 3);
+        if (targets.isNotEmpty) {
+          targets.sort((a, b) => distance(destination, a).compareTo(distance(destination, b)));
+          applyDamage(state, unit, targets.first, 1);
+        }
+        break;
+    }
   }
 }
 
 /// ===============================================================
-/// AI
+/// SIMPLE AI
 /// ===============================================================
 
 class HoloAI {
   final Difficulty difficulty;
-  final Random _random = Random();
+  final math.Random _random = math.Random();
 
   HoloAI(this.difficulty);
 
-  GameMove? chooseMove(GameState state) {
-    final moves = Rules.allLegalMoves(state, PlayerSide.red);
-    if (moves.isEmpty) return null;
+  _AiChoice chooseTurn(GameState state) {
+    final entries = state.unitsFor(PlayerSide.red);
+    if (entries.isEmpty) return _AiChoice.none();
 
-    // Easier AI intentionally makes mistakes sometimes.
-    if (_random.nextDouble() < difficulty.mistakeChance) {
-      return moves[_random.nextInt(moves.length)];
+    if (_random.nextDouble() < difficulty.randomMistakeChance) {
+      return _randomChoice(state, entries);
     }
 
     int bestScore = -999999;
-    final bestMoves = <GameMove>[];
+    _AiChoice? bestChoice;
 
-    for (final move in moves) {
-      final next = state.clone();
-      next.turn = PlayerSide.red;
-      Rules.applyMove(next, move);
+    for (final entry in entries) {
+      final from = entry.key;
+      final unit = entry.value;
 
-      final score = _minimax(
-        next,
-        depth: difficulty.searchDepth,
-        maximizingRed: false,
-        alpha: -999999,
-        beta: 999999,
+      for (final target in Rules.enemiesInRange(state, from, unit)) {
+        final sim = state.copy();
+        final simUnit = sim.unitAt(from)!;
+        Rules.applyDamage(sim, simUnit, target, simUnit.atk);
+        Rules.endTurn(sim);
+        final score = _evaluate(sim);
+        if (score > bestScore) {
+          bestScore = score;
+          bestChoice = _AiChoice(
+            action: TurnAction.attackOnly,
+            from: from,
+            moveTo: null,
+            attackTarget: target,
+          );
+        }
+      }
+
+      final moves = Rules.reachableMoves(state, from, unit);
+      for (final moveTo in moves) {
+        final sim = state.copy();
+        final simUnit = sim.unitAt(from)!;
+        Rules.moveUnit(sim, from, moveTo);
+
+        final targets = Rules.enemiesInRange(sim, moveTo, simUnit);
+        if (targets.isEmpty) {
+          final score = _evaluate(sim);
+          if (score > bestScore) {
+            bestScore = score;
+            bestChoice = _AiChoice(
+              action: TurnAction.moveAttack,
+              from: from,
+              moveTo: moveTo,
+              attackTarget: null,
+            );
+          }
+        } else {
+          for (final target in targets) {
+            final sim2 = sim.copy();
+            final simMovedUnit = sim2.unitAt(moveTo)!;
+            Rules.applyDamage(sim2, simMovedUnit, target, simMovedUnit.atk);
+            Rules.endTurn(sim2);
+            final score = _evaluate(sim2);
+            if (score > bestScore) {
+              bestScore = score;
+              bestChoice = _AiChoice(
+                action: TurnAction.moveAttack,
+                from: from,
+                moveTo: moveTo,
+                attackTarget: target,
+              );
+            }
+          }
+        }
+      }
+
+      final abilityMove =
+          unit.type == UnitType.striker ? unit.move + 1 : unit.move;
+      final abilityMoves = Rules.reachableMoves(
+        state,
+        from,
+        unit,
+        overrideMove: abilityMove,
       );
 
-      if (score > bestScore) {
-        bestScore = score;
-        bestMoves
-          ..clear()
-          ..add(move);
-      } else if (score == bestScore) {
-        bestMoves.add(move);
+      for (final moveTo in abilityMoves) {
+        final sim = state.copy();
+        final simUnit = sim.unitAt(from)!;
+        Rules.performAbility(sim, from, moveTo, simUnit);
+        Rules.endTurn(sim);
+        final score = _evaluate(sim);
+        if (score > bestScore) {
+          bestScore = score;
+          bestChoice = _AiChoice(
+            action: TurnAction.moveAbility,
+            from: from,
+            moveTo: moveTo,
+            attackTarget: null,
+          );
+        }
       }
     }
 
-    return bestMoves[_random.nextInt(bestMoves.length)];
+    return bestChoice ?? _randomChoice(state, entries);
   }
 
-  int _minimax(
-    GameState state, {
-    required int depth,
-    required bool maximizingRed,
-    required int alpha,
-    required int beta,
-  }) {
-    if (depth == 0 || state.gameOver) {
-      return _evaluate(state);
+  _AiChoice _randomChoice(
+    GameState state,
+    List<MapEntry<BoardPos, Unit>> entries,
+  ) {
+    final pick = entries[_random.nextInt(entries.length)];
+    final from = pick.key;
+    final unit = pick.value;
+
+    final attacks = Rules.enemiesInRange(state, from, unit);
+    if (attacks.isNotEmpty) {
+      return _AiChoice(
+        action: TurnAction.attackOnly,
+        from: from,
+        moveTo: null,
+        attackTarget: attacks[_random.nextInt(attacks.length)],
+      );
     }
 
-    final side = maximizingRed ? PlayerSide.red : PlayerSide.cyan;
-    final moves = Rules.allLegalMoves(state, side);
-    if (moves.isEmpty) return _evaluate(state);
-
-    if (maximizingRed) {
-      int best = -999999;
-
-      for (final move in moves) {
-        final next = state.clone();
-        next.turn = side;
-        Rules.applyMove(next, move);
-
-        best = max(
-          best,
-          _minimax(
-            next,
-            depth: depth - 1,
-            maximizingRed: false,
-            alpha: alpha,
-            beta: beta,
-          ),
-        );
-
-        alpha = max(alpha, best);
-        if (beta <= alpha) break;
-      }
-
-      return best;
-    } else {
-      int best = 999999;
-
-      for (final move in moves) {
-        final next = state.clone();
-        next.turn = side;
-        Rules.applyMove(next, move);
-
-        best = min(
-          best,
-          _minimax(
-            next,
-            depth: depth - 1,
-            maximizingRed: true,
-            alpha: alpha,
-            beta: beta,
-          ),
-        );
-
-        beta = min(beta, best);
-        if (beta <= alpha) break;
-      }
-
-      return best;
+    final moves = Rules.reachableMoves(state, from, unit);
+    if (moves.isNotEmpty) {
+      return _AiChoice(
+        action: TurnAction.moveAbility,
+        from: from,
+        moveTo: moves[_random.nextInt(moves.length)],
+        attackTarget: null,
+      );
     }
+
+    return _AiChoice.none();
   }
 
   int _evaluate(GameState state) {
     if (state.gameOver) {
       if (state.winner == PlayerSide.red) return 100000;
       if (state.winner == PlayerSide.cyan) return -100000;
-      return 0;
     }
 
     int score = 0;
 
-    for (int r = 0; r < GameState.size; r++) {
-      for (int c = 0; c < GameState.size; c++) {
-        final piece = state.board[r][c];
-        if (piece == null) continue;
+    for (final entry in state.units.entries) {
+      final pos = entry.key;
+      final unit = entry.value;
 
-        final centerBias = 4 - ((r - 2).abs() + (c - 2).abs());
-        int value = piece.value * 10 + centerBias;
+      int unitValue = 0;
+      unitValue += unit.hp * 8;
+      unitValue += unit.atk * 10;
+      unitValue += unit.range * 5;
+      unitValue += unit.move * 4;
+      unitValue += (GameState.ringCount - 1 - pos.ring) * 3;
 
-        if (piece.type == UnitType.blinker) value += 2;
-        if (piece.type == UnitType.lancer) value += 1;
-
-        score += piece.side == PlayerSide.red ? value : -value;
-      }
+      score += unit.owner == PlayerSide.red ? unitValue : -unitValue;
     }
 
-    score += state.redScore * 3;
-    score -= state.cyanScore * 3;
-    score += Rules.allLegalMoves(state, PlayerSide.red).length * 2;
-    score -= Rules.allLegalMoves(state, PlayerSide.cyan).length * 2;
+    score += state.redScore * 2;
+    score -= state.cyanScore * 2;
 
     return score;
   }
 }
 
+class _AiChoice {
+  final TurnAction? action;
+  final BoardPos? from;
+  final BoardPos? moveTo;
+  final BoardPos? attackTarget;
+
+  _AiChoice({
+    required this.action,
+    required this.from,
+    required this.moveTo,
+    required this.attackTarget,
+  });
+
+  factory _AiChoice.none() {
+    return _AiChoice(
+      action: null,
+      from: null,
+      moveTo: null,
+      attackTarget: null,
+    );
+  }
+
+  bool get isValid => action != null && from != null;
+}
+
 /// ===============================================================
-/// MAIN PAGE
+/// MAIN GAME PAGE
 /// ===============================================================
 
 class GamePage extends StatefulWidget {
@@ -608,10 +742,17 @@ class _GamePageState extends State<GamePage> {
 
   Difficulty difficulty = Difficulty.medium;
   GameMode mode = GameMode.vsAI;
+  TurnAction currentAction = TurnAction.moveAttack;
+
   bool showControls = false;
 
-  BoardPos? selected;
-  List<GameMove> selectedMoves = [];
+  BoardPos? selectedPos;
+  BoardPos? pendingMoveDestination;
+  InteractionPhase phase = InteractionPhase.idle;
+
+  List<BoardPos> highlightedMoves = [];
+  List<BoardPos> highlightedTargets = [];
+
   bool aiBusy = false;
 
   @override
@@ -620,66 +761,149 @@ class _GamePageState extends State<GamePage> {
     state = GameState.initial();
   }
 
-  bool get isWide => MediaQuery.of(context).size.width >= 1000;
+  bool get isWide => MediaQuery.of(context).size.width >= 1100;
 
   void restartGame() {
     setState(() {
       state = GameState.initial();
-      selected = null;
-      selectedMoves = [];
+      selectedPos = null;
+      pendingMoveDestination = null;
+      phase = InteractionPhase.idle;
+      highlightedMoves = [];
+      highlightedTargets = [];
       aiBusy = false;
     });
   }
 
-  void setDifficulty(Difficulty newDifficulty) {
+  void clearSelection() {
+    selectedPos = null;
+    pendingMoveDestination = null;
+    phase = InteractionPhase.idle;
+    highlightedMoves = [];
+    highlightedTargets = [];
+  }
+
+  void beginPieceSelection(BoardPos pos) {
+    final unit = state.unitAt(pos);
+    if (unit == null || unit.owner != state.turn) return;
+
     setState(() {
-      difficulty = newDifficulty;
-      restartGame();
+      selectedPos = pos;
+      pendingMoveDestination = null;
+
+      switch (currentAction) {
+        case TurnAction.moveAttack:
+          phase = InteractionPhase.choosingMove;
+          highlightedMoves = Rules.reachableMoves(state, pos, unit);
+          highlightedTargets = [];
+          state.status = 'Choose move destination';
+          break;
+        case TurnAction.attackOnly:
+          phase = InteractionPhase.choosingAttackTarget;
+          highlightedMoves = [];
+          highlightedTargets = Rules.enemiesInRange(state, pos, unit);
+          state.status = 'Choose attack target';
+          break;
+        case TurnAction.moveAbility:
+          phase = InteractionPhase.choosingAbilityMove;
+          highlightedMoves = Rules.reachableMoves(
+            state,
+            pos,
+            unit,
+            overrideMove: unit.type == UnitType.striker ? unit.move + 1 : unit.move,
+          );
+          highlightedTargets = [];
+          state.status = 'Choose ability move';
+          break;
+      }
     });
   }
 
-  void setMode(GameMode newMode) {
-    setState(() {
-      mode = newMode;
-      restartGame();
-    });
-  }
-
-  void handleTap(BoardPos pos) {
+  void handleBoardTap(BoardPos tappedPos) {
     if (state.gameOver || aiBusy) return;
 
-    final piece = state.at(pos);
+    final tappedUnit = state.unitAt(tappedPos);
 
-    // Select current side's piece.
-    if (piece != null && piece.side == state.turn) {
-      setState(() {
-        selected = pos;
-        selectedMoves = Rules.movesForPiece(state, pos);
-      });
+    if (tappedUnit != null && tappedUnit.owner == state.turn) {
+      beginPieceSelection(tappedPos);
       return;
     }
 
-    // Attempt move if something is selected.
-    if (selected != null) {
-      final matchingMove = selectedMoves.where((m) => m.to == pos).toList();
+    if (selectedPos == null) return;
+    final selectedUnit = state.unitAt(selectedPos!);
+    if (selectedUnit == null) return;
 
-      if (matchingMove.isNotEmpty) {
+    switch (phase) {
+      case InteractionPhase.idle:
+        return;
+
+      case InteractionPhase.choosingMove:
+        if (!highlightedMoves.contains(tappedPos)) return;
+
         setState(() {
-          Rules.applyMove(state, matchingMove.first);
-          selected = null;
-          selectedMoves = [];
+          pendingMoveDestination = tappedPos;
         });
 
-        if (!state.gameOver && mode == GameMode.vsAI && state.turn == PlayerSide.red) {
-          _runAiTurn();
+        final sim = state.copy();
+        final simUnit = sim.unitAt(selectedPos!)!;
+        Rules.moveUnit(sim, selectedPos!, tappedPos);
+        final targets = Rules.enemiesInRange(sim, tappedPos, simUnit);
+
+        if (targets.isEmpty) {
+          setState(() {
+            Rules.moveUnit(state, selectedPos!, tappedPos);
+            Rules.endTurn(state);
+            clearSelection();
+          });
+          _maybeRunAi();
+        } else {
+          setState(() {
+            phase = InteractionPhase.choosingAttackTarget;
+            highlightedMoves = [];
+            highlightedTargets = targets;
+            state.status = 'Choose target to attack';
+          });
         }
-      } else {
+        return;
+
+      case InteractionPhase.choosingAttackTarget:
+        if (!highlightedTargets.contains(tappedPos)) return;
+
         setState(() {
-          selected = null;
-          selectedMoves = [];
+          if (pendingMoveDestination != null) {
+            Rules.moveUnit(state, selectedPos!, pendingMoveDestination!);
+            final movedUnit = state.unitAt(pendingMoveDestination!)!;
+            Rules.applyDamage(state, movedUnit, tappedPos, movedUnit.atk);
+          } else {
+            final attacker = state.unitAt(selectedPos!)!;
+            Rules.applyDamage(state, attacker, tappedPos, attacker.atk);
+          }
+
+          Rules.endTurn(state);
+          clearSelection();
         });
-      }
+        _maybeRunAi();
+        return;
+
+      case InteractionPhase.choosingAbilityMove:
+        if (!highlightedMoves.contains(tappedPos)) return;
+
+        setState(() {
+          final caster = state.unitAt(selectedPos!)!;
+          Rules.performAbility(state, selectedPos!, tappedPos, caster);
+          Rules.endTurn(state);
+          clearSelection();
+        });
+        _maybeRunAi();
+        return;
     }
+  }
+
+  Future<void> _maybeRunAi() async {
+    if (state.gameOver) return;
+    if (mode != GameMode.vsAI) return;
+    if (state.turn != PlayerSide.red) return;
+    await _runAiTurn();
   }
 
   Future<void> _runAiTurn() async {
@@ -688,7 +912,7 @@ class _GamePageState extends State<GamePage> {
       state.status = 'AI thinking...';
     });
 
-    await Future.delayed(const Duration(milliseconds: 350));
+    await Future.delayed(const Duration(milliseconds: 450));
 
     if (!mounted || state.gameOver) {
       setState(() {
@@ -698,302 +922,60 @@ class _GamePageState extends State<GamePage> {
     }
 
     final ai = HoloAI(difficulty);
-    final move = ai.chooseMove(state);
+    final choice = ai.chooseTurn(state);
 
-    if (move == null) {
+    if (!choice.isValid) {
       setState(() {
         state.gameOver = true;
         state.winner = PlayerSide.cyan;
-        state.status = 'Cyan wins: Red has no legal moves!';
+        state.status = 'Cyan wins!';
         aiBusy = false;
       });
       return;
     }
 
     setState(() {
-      Rules.applyMove(state, move);
-      aiBusy = false;
-    });
-  }
+      final unit = state.unitAt(choice.from!);
+      if (unit == null) {
+        aiBusy = false;
+        return;
+      }
 
-  bool isTarget(BoardPos pos) => selectedMoves.any((m) => m.to == pos);
+      switch (choice.action!) {
+        case TurnAction.attackOnly:
+          if (choice.attackTarget != null) {
+            Rules.applyDamage(state, unit, choice.attackTarget!, unit.atk);
+          }
+          Rules.endTurn(state);
+          break;
 
-  void showHowToPlay() {
-    showDialog(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          backgroundColor: const Color(0xFF0B1623),
-          title: const Text('How to Play'),
-          content: const SingleChildScrollView(
-            child: Text(
-              'Goal:\n'
-              'Capture the enemy Core, or leave the opponent with no legal moves.\n\n'
-              'Modes:\n'
-              '• VS AI: play as Cyan against Red AI\n'
-              '• Local 2P: both players use the same device\n\n'
-              'Beasts:\n'
-              '• Core Beast: moves 1 square in any direction\n'
-              '• Lancer Beast: slides any distance horizontally or vertically\n'
-              '• Blinker Beast: jumps in an L-shape\n\n'
-              'Controls:\n'
-              'Tap or click one of the current player\'s pieces, then tap/click a highlighted square to move.\n\n'
-              'Scoring:\n'
-              '• Core = 100\n'
-              '• Lancer = 9\n'
-              '• Blinker = 5\n',
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Close'),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      body: Stack(
-        children: [
-          const Positioned.fill(child: HoloBackdrop()),
-          SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.all(10),
-              child: isWide ? _buildWideLayout() : _buildCompactLayout(),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildWideLayout() {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Expanded(
-          flex: 6,
-          child: Column(
-            children: [
-              _buildTopBar(),
-              const SizedBox(height: 8),
-              Expanded(
-                child: Center(
-                  child: AspectRatio(
-                    aspectRatio: 1,
-                    child: GameBoard(
-                      state: state,
-                      selected: selected,
-                      isMoveTarget: isTarget,
-                      onTapCell: handleTap,
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(width: 10),
-        SizedBox(
-          width: 300,
-          child: SingleChildScrollView(
-            child: _buildControlsPanel(alwaysExpanded: true),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildCompactLayout() {
-    return Column(
-      children: [
-        _buildTopBar(),
-        const SizedBox(height: 8),
-        Expanded(
-          child: Center(
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                final boardSide = min(
-                  constraints.maxWidth,
-                  constraints.maxHeight * 0.98,
-                );
-
-                return SizedBox(
-                  width: boardSide,
-                  height: boardSide,
-                  child: GameBoard(
-                    state: state,
-                    selected: selected,
-                    isMoveTarget: isTarget,
-                    onTapCell: handleTap,
-                  ),
-                );
-              },
-            ),
-          ),
-        ),
-        const SizedBox(height: 8),
-        _buildCompactFooter(),
-      ],
-    );
-  }
-
-  Widget _buildTopBar() {
-    return HoloPanel(
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'DEJAIRK: HOLO GRID',
-                  style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 0.6,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  state.status,
-                  style: const TextStyle(fontSize: 13, color: Colors.white70),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 8),
-          HoloIconMiniButton(
-            icon: Icons.help_outline,
-            onPressed: showHowToPlay,
-          ),
-          const SizedBox(width: 6),
-          HoloIconMiniButton(
-            icon: Icons.refresh,
-            onPressed: restartGame,
-          ),
-          const SizedBox(width: 6),
-          HoloIconMiniButton(
-            icon: showControls ? Icons.expand_less : Icons.tune,
-            onPressed: () {
-              setState(() {
-                showControls = !showControls;
-              });
-            },
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildCompactFooter() {
-    return Column(
-      children: [
-        HoloPanel(
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              _scoreBlock('Cyan', state.cyanScore, const Color(0xFF58F3FF)),
-              _scoreBlock('Red', state.redScore, const Color(0xFFFF5A93)),
-            ],
-          ),
-        ),
-        if (showControls) ...[
-          const SizedBox(height: 8),
-          _buildControlsPanel(alwaysExpanded: false),
-        ],
-      ],
-    );
-  }
-
-  Widget _buildControlsPanel({required bool alwaysExpanded}) {
-    return HoloPanel(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'Game Controls',
-            style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 10),
-          Wrap(
-            spacing: 6,
-            runSpacing: 6,
-            children: [
-              _choiceChip(
-                text: 'VS AI',
-                selected: mode == GameMode.vsAI,
-                onTap: () => setMode(GameMode.vsAI),
-              ),
-              _choiceChip(
-                text: 'Local 2P',
-                selected: mode == GameMode.local,
-                onTap: () => setMode(GameMode.local),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          const Text(
-            'Difficulty',
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 6,
-            runSpacing: 6,
-            children: Difficulty.values.map((d) {
-              return _choiceChip(
-                text: d.label,
-                selected: difficulty == d,
-                onTap: () => setDifficulty(d),
+        case TurnAction.moveAttack:
+          if (choice.moveTo != null) {
+            Rules.moveUnit(state, choice.from!, choice.moveTo!);
+            final movedUnit = state.unitAt(choice.moveTo!)!;
+            if (choice.attackTarget != null) {
+              Rules.applyDamage(
+                state,
+                movedUnit,
+                choice.attackTarget!,
+                movedUnit.atk,
               );
-            }).toList(),
-          ),
-          const SizedBox(height: 12),
-          Text('Mode: ${mode.label}'),
-          const SizedBox(height: 4),
-          Text('Current Turn: ${state.turn.label}'),
-          const SizedBox(height: 4),
-          Text('Selected: ${_selectedText()}'),
-          const SizedBox(height: 4),
-          Text('Game Over: ${state.gameOver ? "Yes" : "No"}'),
-          if (state.winner != null) ...[
-            const SizedBox(height: 4),
-            Text('Winner: ${state.winner!.label}'),
-          ],
-          if (alwaysExpanded) ...[
-            const SizedBox(height: 14),
-            const Text(
-              'Beast Types',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 8),
-            const LegendTile(
-              iconText: '👑',
-              title: 'Core Beast',
-              subtitle: '1 square any direction',
-            ),
-            const SizedBox(height: 8),
-            const LegendTile(
-              iconText: '🦴',
-              title: 'Lancer Beast',
-              subtitle: 'Slides in straight lines',
-            ),
-            const SizedBox(height: 8),
-            const LegendTile(
-              iconText: '🕷',
-              title: 'Blinker Beast',
-              subtitle: 'Jumps in an L-shape',
-            ),
-          ],
-        ],
-      ),
-    );
+            }
+          }
+          Rules.endTurn(state);
+          break;
+
+        case TurnAction.moveAbility:
+          if (choice.moveTo != null) {
+            Rules.performAbility(state, choice.from!, choice.moveTo!, unit);
+          }
+          Rules.endTurn(state);
+          break;
+      }
+
+      aiBusy = false;
+      clearSelection();
+    });
   }
 
   Widget _choiceChip({
@@ -1039,174 +1021,515 @@ class _GamePageState extends State<GamePage> {
   }
 
   String _selectedText() {
-    if (selected == null) return 'None';
-    final piece = state.at(selected!);
-    if (piece == null) return 'None';
-    return '${piece.shortName} at (${selected!.row}, ${selected!.col})';
+    if (selectedPos == null) return 'None';
+    final unit = state.unitAt(selectedPos!);
+    if (unit == null) return 'None';
+    return '${unit.shortName} @ ${selectedPos!}';
   }
-}
 
-/// ===============================================================
-/// BOARD
-/// ===============================================================
+  Widget _buildTopBar() {
+    return HoloPanel(
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'DEJAIRK: HOLO GRID',
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.6,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  state.status,
+                  style: const TextStyle(fontSize: 13, color: Colors.white70),
+                ),
+                const SizedBox(height: 2),
+                const Text(
+                  gameVersion,
+                  style: TextStyle(fontSize: 11, color: Colors.white38),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          HoloIconMiniButton(
+            icon: Icons.help_outline,
+            onPressed: _showHowToPlay,
+          ),
+          const SizedBox(width: 6),
+          HoloIconMiniButton(
+            icon: Icons.refresh,
+            onPressed: restartGame,
+          ),
+          const SizedBox(width: 6),
+          HoloIconMiniButton(
+            icon: showControls ? Icons.expand_less : Icons.tune,
+            onPressed: () {
+              setState(() {
+                showControls = !showControls;
+              });
+            },
+          ),
+        ],
+      ),
+    );
+  }
 
-class GameBoard extends StatelessWidget {
-  final GameState state;
-  final BoardPos? selected;
-  final bool Function(BoardPos) isMoveTarget;
-  final void Function(BoardPos) onTapCell;
+  Widget _buildControlsPanel({required bool alwaysExpanded}) {
+    return HoloPanel(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Combat Controls',
+            style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: [
+              _choiceChip(
+                text: 'VS AI',
+                selected: mode == GameMode.vsAI,
+                onTap: () {
+                  setState(() {
+                    mode = GameMode.vsAI;
+                    restartGame();
+                  });
+                },
+              ),
+              _choiceChip(
+                text: 'Local 2P',
+                selected: mode == GameMode.local,
+                onTap: () {
+                  setState(() {
+                    mode = GameMode.local;
+                    restartGame();
+                  });
+                },
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          const Text(
+            'Action This Turn',
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: TurnAction.values.map((a) {
+              return _choiceChip(
+                text: a.label,
+                selected: currentAction == a,
+                onTap: () {
+                  setState(() {
+                    currentAction = a;
+                    clearSelection();
+                  });
+                },
+              );
+            }).toList(),
+          ),
+          const SizedBox(height: 12),
+          const Text(
+            'AI Difficulty',
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: Difficulty.values.map((d) {
+              return _choiceChip(
+                text: d.label,
+                selected: difficulty == d,
+                onTap: () {
+                  setState(() {
+                    difficulty = d;
+                  });
+                },
+              );
+            }).toList(),
+          ),
+          const SizedBox(height: 12),
+          Text('Mode: ${mode.label}'),
+          const SizedBox(height: 4),
+          Text('Turn: ${state.turn.label}'),
+          const SizedBox(height: 4),
+          Text('Selected: ${_selectedText()}'),
+          const SizedBox(height: 4),
+          Text('Phase: ${phase.name}'),
+          const SizedBox(height: 4),
+          Text('Game Over: ${state.gameOver ? "Yes" : "No"}'),
+          if (state.winner != null) ...[
+            const SizedBox(height: 4),
+            Text('Winner: ${state.winner!.label}'),
+          ],
+          if (alwaysExpanded) ...[
+            const SizedBox(height: 14),
+            const Text(
+              'Unit Stats',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            const Text('Brute  | HP 8 | ATK 3 | RNG 1 | MOV 1 | Shockwave'),
+            const SizedBox(height: 6),
+            const Text('Striker| HP 5 | ATK 2 | RNG 1 | MOV 2 | Sprint'),
+            const SizedBox(height: 6),
+            const Text('Mystic | HP 6 | ATK 2 | RNG 2 | MOV 1 | Heal'),
+            const SizedBox(height: 6),
+            const Text('Tentacl| HP 5 | ATK 2 | RNG 2 | MOV 1 | Beam Lash'),
+          ],
+        ],
+      ),
+    );
+  }
 
-  const GameBoard({
-    super.key,
-    required this.state,
-    required this.selected,
-    required this.isMoveTarget,
-    required this.onTapCell,
-  });
-
-  Widget _buildGrid(double cellSize) {
-    return Stack(
+  Widget _buildCompactFooter() {
+    return Column(
       children: [
-        Positioned.fill(
-          child: CustomPaint(
-            painter: GridPainter(),
+        HoloPanel(
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              _scoreBlock('Cyan', state.cyanScore, const Color(0xFF58F3FF)),
+              _scoreBlock('Red', state.redScore, const Color(0xFFFF5A93)),
+            ],
           ),
         ),
-        for (int r = 0; r < GameState.size; r++)
-          for (int c = 0; c < GameState.size; c++)
-            Positioned(
-              left: c * cellSize,
-              top: r * cellSize,
-              width: cellSize,
-              height: cellSize,
-              child: _BoardCell(
-                piece: state.board[r][c],
-                selected: selected == BoardPos(r, c),
-                moveTarget: isMoveTarget(BoardPos(r, c)),
-                onTap: () => onTapCell(BoardPos(r, c)),
-              ),
-            ),
+        if (showControls) ...[
+          const SizedBox(height: 8),
+          _buildControlsPanel(alwaysExpanded: false),
+        ],
       ],
     );
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final side = min(constraints.maxWidth, constraints.maxHeight);
-        final cellSize = side / GameState.size;
-
-        return Container(
-          width: side,
-          height: side,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: const Color(0x8858F3FF), width: 2),
-            gradient: const LinearGradient(
-              colors: [
-                Color(0x2200E7FF),
-                Color(0x1100E7FF),
-                Color(0x2200E7FF),
-              ],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
-            boxShadow: const [
-              BoxShadow(
-                color: Color(0x2258F3FF),
-                blurRadius: 25,
-                spreadRadius: 2,
+  Widget _buildWideLayout() {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(
+          flex: 6,
+          child: Column(
+            children: [
+              _buildTopBar(),
+              const SizedBox(height: 8),
+              Expanded(
+                child: Center(
+                  child: AspectRatio(
+                    aspectRatio: 1,
+                    child: CombatBoard(
+                      state: state,
+                      selectedPos: selectedPos,
+                      highlightedMoves: highlightedMoves,
+                      highlightedTargets: highlightedTargets,
+                      onTapCell: handleBoardTap,
+                    ),
+                  ),
+                ),
               ),
             ],
           ),
-          child: _buildGrid(cellSize),
+        ),
+        const SizedBox(width: 10),
+        SizedBox(
+          width: 320,
+          child: SingleChildScrollView(
+            child: Column(
+              children: [
+                _buildControlsPanel(alwaysExpanded: true),
+                const SizedBox(height: 8),
+                HoloPanel(
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      _scoreBlock('Cyan', state.cyanScore, const Color(0xFF58F3FF)),
+                      _scoreBlock('Red', state.redScore, const Color(0xFFFF5A93)),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildCompactLayout() {
+    return Column(
+      children: [
+        _buildTopBar(),
+        const SizedBox(height: 8),
+        Expanded(
+          child: Center(
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final side = math.min(
+                  constraints.maxWidth,
+                  constraints.maxHeight * 0.98,
+                );
+                return SizedBox(
+                  width: side,
+                  height: side,
+                  child: CombatBoard(
+                    state: state,
+                    selectedPos: selectedPos,
+                    highlightedMoves: highlightedMoves,
+                    highlightedTargets: highlightedTargets,
+                    onTapCell: handleBoardTap,
+                  ),
+                );
+              },
+            ),
+          ),
+        ),
+        const SizedBox(height: 8),
+        _buildCompactFooter(),
+      ],
+    );
+  }
+
+  void _showHowToPlay() {
+    showDialog(
+      context: context,
+      builder: (_) {
+        return AlertDialog(
+          backgroundColor: const Color(0xFF0B1623),
+          title: const Text('How to Play'),
+          content: const SingleChildScrollView(
+            child: Text(
+              'This version uses round holo combat rules.\n\n'
+              'Each unit has:\n'
+              '• HP = health\n'
+              '• ATK = damage dealt\n'
+              '• RNG = attack range\n'
+              '• MOV = move distance\n\n'
+              'Turn options:\n'
+              '• Move + Attack\n'
+              '• Attack Only\n'
+              '• Move + Ability\n\n'
+              'Movement uses round-board adjacency:\n'
+              '• around the orbit\n'
+              '• or along the ray\n'
+              '• no diagonals\n\n'
+              'Win by eliminating the other side.\n\n'
+              'Abilities:\n'
+              '• Brute: shockwave nearby enemies\n'
+              '• Striker: sprint farther\n'
+              '• Mystic: heal self\n'
+              '• Tentacle: beam nearest target\n',
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Close'),
+            )
+          ],
         );
       },
     );
   }
-}
-
-class _BoardCell extends StatelessWidget {
-  final Piece? piece;
-  final bool selected;
-  final bool moveTarget;
-  final VoidCallback onTap;
-
-  const _BoardCell({
-    required this.piece,
-    required this.selected,
-    required this.moveTarget,
-    required this.onTap,
-  });
 
   @override
   Widget build(BuildContext context) {
-    return MouseRegion(
-      cursor: SystemMouseCursors.click,
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: onTap,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 140),
-          margin: const EdgeInsets.all(4),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(12),
-            color: selected
-                ? const Color(0x2247F1FF)
-                : moveTarget
-                    ? const Color(0x22FFD56A)
-                    : Colors.transparent,
-            border: Border.all(
-              color: selected
-                  ? const Color(0xFF58F3FF)
-                  : moveTarget
-                      ? const Color(0xFFFFD56A)
-                      : Colors.transparent,
-              width: 2,
+    return Scaffold(
+      body: Stack(
+        children: [
+          const Positioned.fill(child: HoloBackdrop()),
+          SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.all(10),
+              child: isWide ? _buildWideLayout() : _buildCompactLayout(),
             ),
-            boxShadow: selected || moveTarget
-                ? [
-                    BoxShadow(
-                      color: selected
-                          ? const Color(0x3358F3FF)
-                          : const Color(0x33FFD56A),
-                      blurRadius: 14,
-                    ),
-                  ]
-                : null,
           ),
-          child: Stack(
-            children: [
-              if (moveTarget && piece == null)
-                const Center(
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: Color(0x88FFD56A),
+          if (state.gameOver)
+            Positioned.fill(
+              child: Container(
+                color: Colors.black54,
+                child: Center(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 360),
+                    child: HoloPanel(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            state.winner == null
+                                ? 'Match Over'
+                                : '${state.winner!.label} Wins',
+                            style: const TextStyle(
+                              fontSize: 24,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(state.status),
+                          const SizedBox(height: 16),
+                          ElevatedButton(
+                            onPressed: restartGame,
+                            child: const Text('Play Again'),
+                          ),
+                        ],
+                      ),
                     ),
-                    child: SizedBox(width: 12, height: 12),
                   ),
                 ),
-              if (piece != null) Center(child: HoloPiece(piece: piece!)),
-            ],
-          ),
-        ),
+              ),
+            ),
+        ],
       ),
     );
   }
 }
 
 /// ===============================================================
-/// MONSTER / BEAST TOKENS
+/// ROUND COMBAT BOARD
 /// ===============================================================
 
-class HoloPiece extends StatelessWidget {
-  final Piece piece;
+class CombatBoard extends StatelessWidget {
+  final GameState state;
+  final BoardPos? selectedPos;
+  final List<BoardPos> highlightedMoves;
+  final List<BoardPos> highlightedTargets;
+  final void Function(BoardPos) onTapCell;
 
-  const HoloPiece({
+  const CombatBoard({
     super.key,
-    required this.piece,
+    required this.state,
+    required this.selectedPos,
+    required this.highlightedMoves,
+    required this.highlightedTargets,
+    required this.onTapCell,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (_, constraints) {
+        final side = math.min(constraints.maxWidth, constraints.maxHeight);
+
+        return SizedBox(
+          width: side,
+          height: side,
+          child: Stack(
+            children: [
+              Positioned.fill(
+                child: CustomPaint(
+                  painter: RoundBoardPainter(),
+                ),
+              ),
+              for (int ring = 0; ring < GameState.ringCount; ring++)
+                for (int sector = 0; sector < GameState.sectorCount; sector++)
+                  _buildCell(side, BoardPos(ring, sector)),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Positioned _buildCell(double side, BoardPos pos) {
+    final point = _cellCenter(side, pos);
+    final radius = side * 0.055;
+
+    final unit = state.unitAt(pos);
+    final isSelected = selectedPos == pos;
+    final isMove = highlightedMoves.contains(pos);
+    final isTarget = highlightedTargets.contains(pos);
+
+    return Positioned(
+      left: point.dx - radius,
+      top: point.dy - radius,
+      width: radius * 2,
+      height: radius * 2,
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        child: GestureDetector(
+          onTap: () => onTapCell(pos),
+          behavior: HitTestBehavior.opaque,
+          child: Container(
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: isSelected
+                  ? const Color(0x2247F1FF)
+                  : isMove
+                      ? const Color(0x22FFD56A)
+                      : isTarget
+                          ? const Color(0x33FF5A93)
+                          : Colors.transparent,
+              border: Border.all(
+                color: isSelected
+                    ? const Color(0xFF58F3FF)
+                    : isMove
+                        ? const Color(0xFFFFD56A)
+                        : isTarget
+                            ? const Color(0xFFFF5A93)
+                            : Colors.transparent,
+                width: 2,
+              ),
+              boxShadow: isSelected || isMove || isTarget
+                  ? [
+                      BoxShadow(
+                        color: isSelected
+                            ? const Color(0x4458F3FF)
+                            : isMove
+                                ? const Color(0x44FFD56A)
+                                : const Color(0x44FF5A93),
+                        blurRadius: 12,
+                      )
+                    ]
+                  : null,
+            ),
+            child: unit == null
+                ? const SizedBox.shrink()
+                : Center(
+                    child: BeastToken(unit: unit),
+                  ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Offset _cellCenter(double side, BoardPos pos) {
+    final center = Offset(side / 2, side / 2);
+    final maxRadius = side * 0.38;
+
+    // ring 0 near center, ring 2 near outer ring
+    final ringStep = maxRadius / GameState.ringCount;
+    final radius = ringStep * (pos.ring + 1);
+
+    final angleStep = 2 * math.pi / GameState.sectorCount;
+    final angle = -math.pi / 2 + pos.sector * angleStep;
+
+    return Offset(
+      center.dx + radius * math.cos(angle),
+      center.dy + radius * math.sin(angle),
+    );
+  }
+}
+
+/// ===============================================================
+/// MONSTER TOKEN VISUALS
+/// ===============================================================
+
+class BeastToken extends StatelessWidget {
+  final Unit unit;
+
+  const BeastToken({
+    super.key,
+    required this.unit,
   });
 
   @override
@@ -1215,302 +1538,289 @@ class HoloPiece extends StatelessWidget {
       width: 52,
       height: 52,
       child: CustomPaint(
-        painter: BeastPiecePainter(piece: piece),
+        painter: BeastTokenPainter(unit: unit),
       ),
     );
   }
 }
 
-class BeastPiecePainter extends CustomPainter {
-  final Piece piece;
+class BeastTokenPainter extends CustomPainter {
+  final Unit unit;
 
-  BeastPiecePainter({required this.piece});
+  BeastTokenPainter({required this.unit});
 
   @override
   void paint(Canvas canvas, Size size) {
-    final color = piece.side.color;
+    final color = unit.owner.color;
     final center = size.center(Offset.zero);
 
-    // ------------------------------------------------------------
-    // Shared holographic base for all monster tokens.
-    // Easy hack point:
-    // - change circle size
-    // - increase glow
-    // - swap to hex / diamond / shield base
-    // ------------------------------------------------------------
-    final glowPaint = Paint()
+    final glow = Paint()
       ..color = color.withOpacity(0.16)
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 12);
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 10);
 
-    final ringPaint = Paint()
+    final ring = Paint()
+      ..color = color.withOpacity(0.95)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.8;
+
+    final fill = Paint()
+      ..shader = RadialGradient(
+        colors: [
+          color.withOpacity(0.35),
+          color.withOpacity(0.12),
+          color.withOpacity(0.03),
+        ],
+      ).createShader(Rect.fromCircle(center: center, radius: size.width * 0.30));
+
+    canvas.drawCircle(center, size.width * 0.32, glow);
+    canvas.drawCircle(center, size.width * 0.29, fill);
+    canvas.drawCircle(center, size.width * 0.29, ring);
+
+    switch (unit.type) {
+      case UnitType.brute:
+        _drawBrute(canvas, size, color);
+        break;
+      case UnitType.striker:
+        _drawStriker(canvas, size, color);
+        break;
+      case UnitType.mystic:
+        _drawMystic(canvas, size, color);
+        break;
+      case UnitType.tentacle:
+        _drawTentacle(canvas, size, color);
+        break;
+    }
+
+    _drawHpBar(canvas, size);
+  }
+
+  void _drawBrute(Canvas canvas, Size size, Color color) {
+    final p = Paint()
       ..color = color.withOpacity(0.95)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 2.0;
 
-    final fillPaint = Paint()
-      ..shader = RadialGradient(
-        colors: [
-          color.withOpacity(0.34),
-          color.withOpacity(0.14),
-          color.withOpacity(0.03),
-        ],
-      ).createShader(Rect.fromCircle(center: center, radius: size.width * 0.34));
+    final c = size.center(Offset.zero);
 
-    canvas.drawCircle(center, size.width * 0.34, glowPaint);
-    canvas.drawCircle(center, size.width * 0.31, fillPaint);
-    canvas.drawCircle(center, size.width * 0.31, ringPaint);
-
-    // ------------------------------------------------------------
-    // Piece-specific creature silhouette.
-    // ------------------------------------------------------------
-    switch (piece.type) {
-      case UnitType.core:
-        _drawCoreBeast(canvas, size, color);
-        break;
-      case UnitType.lancer:
-        _drawLancerBeast(canvas, size, color);
-        break;
-      case UnitType.blinker:
-        _drawBlinkerBeast(canvas, size, color);
-        break;
-    }
-
-    _drawEyes(canvas, size, color);
-  }
-
-  void _drawCoreBeast(Canvas canvas, Size size, Color color) {
-    // ------------------------------------------------------------
-    // Core Beast:
-    // Think crowned skull / hive queen / boss creature.
-    // Easy hack point:
-    // exaggerate horns or add a lower jaw / tentacles.
-    // ------------------------------------------------------------
-    final line = Paint()
-      ..color = color.withOpacity(0.94)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 2.0;
-
-    final center = size.center(Offset.zero);
-
-    final crown = Path()
-      ..moveTo(center.dx - size.width * 0.18, center.dy - size.height * 0.02)
-      ..lineTo(center.dx - size.width * 0.28, center.dy - size.height * 0.20)
-      ..lineTo(center.dx - size.width * 0.12, center.dy - size.height * 0.14)
-      ..lineTo(center.dx, center.dy - size.height * 0.26)
-      ..lineTo(center.dx + size.width * 0.12, center.dy - size.height * 0.14)
-      ..lineTo(center.dx + size.width * 0.28, center.dy - size.height * 0.20)
-      ..lineTo(center.dx + size.width * 0.18, center.dy - size.height * 0.02);
-
-    final head = Path()
-      ..moveTo(center.dx - size.width * 0.18, center.dy - size.height * 0.02)
+    final path = Path()
+      ..moveTo(c.dx - size.width * 0.16, c.dy + size.height * 0.10)
       ..quadraticBezierTo(
-        center.dx - size.width * 0.20,
-        center.dy + size.height * 0.14,
-        center.dx - size.width * 0.08,
-        center.dy + size.height * 0.22,
+        c.dx - size.width * 0.22,
+        c.dy - size.height * 0.02,
+        c.dx - size.width * 0.08,
+        c.dy - size.height * 0.18,
       )
-      ..lineTo(center.dx - size.width * 0.04, center.dy + size.height * 0.08)
-      ..lineTo(center.dx + size.width * 0.04, center.dy + size.height * 0.08)
-      ..lineTo(center.dx + size.width * 0.08, center.dy + size.height * 0.22)
+      ..lineTo(c.dx, c.dy - size.height * 0.24)
+      ..lineTo(c.dx + size.width * 0.08, c.dy - size.height * 0.18)
       ..quadraticBezierTo(
-        center.dx + size.width * 0.20,
-        center.dy + size.height * 0.14,
-        center.dx + size.width * 0.18,
-        center.dy - size.height * 0.02,
+        c.dx + size.width * 0.22,
+        c.dy - size.height * 0.02,
+        c.dx + size.width * 0.16,
+        c.dy + size.height * 0.10,
       );
 
-    canvas.drawPath(crown, line);
-    canvas.drawPath(head, line);
-
+    canvas.drawPath(path, p);
     canvas.drawLine(
-      Offset(center.dx - size.width * 0.09, center.dy + size.height * 0.10),
-      Offset(center.dx + size.width * 0.09, center.dy + size.height * 0.10),
-      line,
+      Offset(c.dx - size.width * 0.11, c.dy - size.height * 0.02),
+      Offset(c.dx + size.width * 0.11, c.dy - size.height * 0.02),
+      p,
     );
   }
 
-  void _drawLancerBeast(Canvas canvas, Size size, Color color) {
-    // ------------------------------------------------------------
-    // Lancer Beast:
-    // Think horned charger / fang spear / armored predator.
-    // Easy hack point:
-    // widen the horns or turn it into a dragon-head silhouette.
-    // ------------------------------------------------------------
-    final line = Paint()
-      ..color = color.withOpacity(0.94)
+  void _drawStriker(Canvas canvas, Size size, Color color) {
+    final p = Paint()
+      ..color = color.withOpacity(0.95)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 2.0;
 
-    final center = size.center(Offset.zero);
+    final c = size.center(Offset.zero);
 
-    final snout = Path()
-      ..moveTo(center.dx, center.dy - size.height * 0.24)
-      ..lineTo(center.dx + size.width * 0.10, center.dy - size.height * 0.02)
-      ..lineTo(center.dx, center.dy + size.height * 0.20)
-      ..lineTo(center.dx - size.width * 0.10, center.dy - size.height * 0.02)
+    final body = Path()
+      ..moveTo(c.dx, c.dy - size.height * 0.24)
+      ..lineTo(c.dx + size.width * 0.10, c.dy - size.height * 0.04)
+      ..lineTo(c.dx, c.dy + size.height * 0.18)
+      ..lineTo(c.dx - size.width * 0.10, c.dy - size.height * 0.04)
       ..close();
 
-    canvas.drawLine(
-      Offset(center.dx - size.width * 0.05, center.dy - size.height * 0.08),
-      Offset(center.dx - size.width * 0.24, center.dy - size.height * 0.20),
-      line,
-    );
-    canvas.drawLine(
-      Offset(center.dx + size.width * 0.05, center.dy - size.height * 0.08),
-      Offset(center.dx + size.width * 0.24, center.dy - size.height * 0.20),
-      line,
-    );
+    canvas.drawPath(body, p);
 
     canvas.drawLine(
-      Offset(center.dx - size.width * 0.06, center.dy + size.height * 0.08),
-      Offset(center.dx - size.width * 0.18, center.dy + size.height * 0.24),
-      line,
+      Offset(c.dx - size.width * 0.05, c.dy - size.height * 0.08),
+      Offset(c.dx - size.width * 0.22, c.dy - size.height * 0.20),
+      p,
     );
     canvas.drawLine(
-      Offset(center.dx + size.width * 0.06, center.dy + size.height * 0.08),
-      Offset(center.dx + size.width * 0.18, center.dy + size.height * 0.24),
-      line,
-    );
-
-    canvas.drawPath(snout, line);
-
-    canvas.drawLine(
-      Offset(center.dx, center.dy - size.height * 0.24),
-      Offset(center.dx, center.dy + size.height * 0.22),
-      line,
+      Offset(c.dx + size.width * 0.05, c.dy - size.height * 0.08),
+      Offset(c.dx + size.width * 0.22, c.dy - size.height * 0.20),
+      p,
     );
   }
 
-  void _drawBlinkerBeast(Canvas canvas, Size size, Color color) {
-    // ------------------------------------------------------------
-    // Blinker Beast:
-    // Think spider / leaper / skittering alien horror.
-    // Easy hack point:
-    // add more legs, make body longer, or add tail stinger.
-    // ------------------------------------------------------------
-    final line = Paint()
-      ..color = color.withOpacity(0.94)
+  void _drawMystic(Canvas canvas, Size size, Color color) {
+    final p = Paint()
+      ..color = color.withOpacity(0.95)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 2.0;
 
-    final center = size.center(Offset.zero);
+    final c = size.center(Offset.zero);
+
+    canvas.drawCircle(c.translate(0, -size.height * 0.06), size.width * 0.09, p);
+    canvas.drawCircle(c.translate(-size.width * 0.10, size.height * 0.04), size.width * 0.07, p);
+    canvas.drawCircle(c.translate(size.width * 0.10, size.height * 0.04), size.width * 0.07, p);
+
+    canvas.drawLine(
+      Offset(c.dx, c.dy - size.height * 0.18),
+      Offset(c.dx, c.dy + size.height * 0.16),
+      p,
+    );
+  }
+
+  void _drawTentacle(Canvas canvas, Size size, Color color) {
+    final p = Paint()
+      ..color = color.withOpacity(0.95)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.0;
+
+    final c = size.center(Offset.zero);
 
     canvas.drawOval(
       Rect.fromCenter(
-        center: center,
-        width: size.width * 0.24,
-        height: size.height * 0.18,
+        center: c.translate(0, -size.height * 0.04),
+        width: size.width * 0.18,
+        height: size.height * 0.16,
       ),
-      line,
+      p,
     );
 
-    canvas.drawCircle(
-      center.translate(0, -size.height * 0.15),
-      size.width * 0.07,
-      line,
-    );
+    final t1 = Path()
+      ..moveTo(c.dx - size.width * 0.05, c.dy)
+      ..quadraticBezierTo(
+        c.dx - size.width * 0.18,
+        c.dy + size.height * 0.12,
+        c.dx - size.width * 0.10,
+        c.dy + size.height * 0.22,
+      );
 
-    final legs = [
-      [
-        Offset(center.dx - size.width * 0.08, center.dy - size.height * 0.03),
-        Offset(center.dx - size.width * 0.24, center.dy - size.height * 0.16),
-      ],
-      [
-        Offset(center.dx - size.width * 0.10, center.dy + size.height * 0.02),
-        Offset(center.dx - size.width * 0.26, center.dy + size.height * 0.02),
-      ],
-      [
-        Offset(center.dx - size.width * 0.08, center.dy + size.height * 0.07),
-        Offset(center.dx - size.width * 0.24, center.dy + size.height * 0.18),
-      ],
-      [
-        Offset(center.dx + size.width * 0.08, center.dy - size.height * 0.03),
-        Offset(center.dx + size.width * 0.24, center.dy - size.height * 0.16),
-      ],
-      [
-        Offset(center.dx + size.width * 0.10, center.dy + size.height * 0.02),
-        Offset(center.dx + size.width * 0.26, center.dy + size.height * 0.02),
-      ],
-      [
-        Offset(center.dx + size.width * 0.08, center.dy + size.height * 0.07),
-        Offset(center.dx + size.width * 0.24, center.dy + size.height * 0.18),
-      ],
-    ];
+    final t2 = Path()
+      ..moveTo(c.dx, c.dy)
+      ..quadraticBezierTo(
+        c.dx,
+        c.dy + size.height * 0.14,
+        c.dx,
+        c.dy + size.height * 0.24,
+      );
 
-    for (final leg in legs) {
-      canvas.drawLine(leg[0], leg[1], line);
-    }
+    final t3 = Path()
+      ..moveTo(c.dx + size.width * 0.05, c.dy)
+      ..quadraticBezierTo(
+        c.dx + size.width * 0.18,
+        c.dy + size.height * 0.12,
+        c.dx + size.width * 0.10,
+        c.dy + size.height * 0.22,
+      );
+
+    canvas.drawPath(t1, p);
+    canvas.drawPath(t2, p);
+    canvas.drawPath(t3, p);
   }
 
-  void _drawEyes(Canvas canvas, Size size, Color color) {
-    // ------------------------------------------------------------
-    // Shared eye glow.
-    // Easy hack point:
-    // move eyes per piece type, or make red/green eye colors.
-    // ------------------------------------------------------------
-    final center = size.center(Offset.zero);
+  void _drawHpBar(Canvas canvas, Size size) {
+    final width = size.width * 0.42;
+    final left = (size.width - width) / 2;
+    final top = size.height * 0.80;
 
-    final eyeFill = Paint()
-      ..color = Colors.white.withOpacity(0.95)
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2);
+    final bg = Paint()
+      ..color = Colors.white24
+      ..style = PaintingStyle.fill;
 
-    final eyeGlow = Paint()
-      ..color = color.withOpacity(0.60)
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6);
+    final fg = Paint()
+      ..color = Colors.white.withOpacity(0.9)
+      ..style = PaintingStyle.fill;
 
-    final leftEye = center.translate(-size.width * 0.06, -size.height * 0.05);
-    final rightEye = center.translate(size.width * 0.06, -size.height * 0.05);
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        Rect.fromLTWH(left, top, width, 4),
+        const Radius.circular(2),
+      ),
+      bg,
+    );
 
-    canvas.drawCircle(leftEye, 2.5, eyeGlow);
-    canvas.drawCircle(rightEye, 2.5, eyeGlow);
-    canvas.drawCircle(leftEye, 1.4, eyeFill);
-    canvas.drawCircle(rightEye, 1.4, eyeFill);
+    final fillWidth = width * (unit.hp / unit.maxHp).clamp(0.0, 1.0);
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        Rect.fromLTWH(left, top, fillWidth, 4),
+        const Radius.circular(2),
+      ),
+      fg,
+    );
   }
 
   @override
-  bool shouldRepaint(covariant BeastPiecePainter oldDelegate) {
-    return oldDelegate.piece.side != piece.side ||
-        oldDelegate.piece.type != piece.type;
+  bool shouldRepaint(covariant BeastTokenPainter oldDelegate) {
+    return oldDelegate.unit.type != unit.type ||
+        oldDelegate.unit.owner != unit.owner ||
+        oldDelegate.unit.hp != unit.hp;
   }
 }
 
 /// ===============================================================
-/// BOARD PAINTER
+/// ROUND BOARD PAINTER
 /// ===============================================================
 
-class GridPainter extends CustomPainter {
+class RoundBoardPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
-    final glow = Paint()
-      ..color = const Color(0x2258F3FF)
-      ..strokeWidth = 4
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8);
+    final center = size.center(Offset.zero);
+    final maxRadius = size.width * 0.42;
 
-    final line = Paint()
+    final bg = Paint()
+      ..shader = const RadialGradient(
+        colors: [
+          Color(0x2200E7FF),
+          Color(0x1100E7FF),
+          Color(0x0300E7FF),
+        ],
+      ).createShader(Rect.fromCircle(center: center, radius: maxRadius));
+
+    final outerGlow = Paint()
+      ..color = const Color(0x3358F3FF)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 10
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 14);
+
+    final ringPaint = Paint()
       ..color = const Color(0xAA58F3FF)
-      ..strokeWidth = 1.1;
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.4;
 
-    final step = size.width / GameState.size;
+    canvas.drawCircle(center, maxRadius, bg);
+    canvas.drawCircle(center, maxRadius, outerGlow);
 
-    for (int i = 1; i < GameState.size; i++) {
-      final d = i * step;
-      canvas.drawLine(Offset(d, 0), Offset(d, size.height), glow);
-      canvas.drawLine(Offset(0, d), Offset(size.width, d), glow);
-      canvas.drawLine(Offset(d, 0), Offset(d, size.height), line);
-      canvas.drawLine(Offset(0, d), Offset(size.width, d), line);
+    final ringStep = maxRadius / GameState.ringCount;
+
+    for (int r = 1; r <= GameState.ringCount; r++) {
+      canvas.drawCircle(center, ringStep * r, ringPaint);
     }
 
-    final center = size.center(Offset.zero);
-    final centerRing = Paint()
-      ..color = const Color(0x4458F3FF)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.5;
+    final sectorStep = 2 * math.pi / GameState.sectorCount;
+    for (int s = 0; s < GameState.sectorCount; s++) {
+      final angle = -math.pi / 2 + s * sectorStep;
+      final end = Offset(
+        center.dx + maxRadius * math.cos(angle),
+        center.dy + maxRadius * math.sin(angle),
+      );
+      canvas.drawLine(center, end, ringPaint);
+    }
 
-    canvas.drawCircle(center, step * 0.24, centerRing);
+    final centerGlow = Paint()
+      ..color = const Color(0x6658F3FF)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 18);
+
+    canvas.drawCircle(center, size.width * 0.03, centerGlow);
   }
 
   @override
-  bool shouldRepaint(covariant GridPainter oldDelegate) => false;
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
 /// ===============================================================
@@ -1587,58 +1897,6 @@ class HoloIconMiniButton extends StatelessWidget {
           child: Icon(icon, color: const Color(0xFF58F3FF), size: 20),
         ),
       ),
-    );
-  }
-}
-
-class LegendTile extends StatelessWidget {
-  final String iconText;
-  final String title;
-  final String subtitle;
-
-  const LegendTile({
-    super.key,
-    required this.iconText,
-    required this.title,
-    required this.subtitle,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Container(
-          width: 34,
-          height: 34,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            border: Border.all(color: const Color(0xFF58F3FF), width: 1.4),
-            boxShadow: const [
-              BoxShadow(
-                color: Color(0x2258F3FF),
-                blurRadius: 10,
-              ),
-            ],
-          ),
-          child: Center(
-            child: Text(
-              iconText,
-              style: const TextStyle(fontSize: 16),
-            ),
-          ),
-        ),
-        const SizedBox(width: 10),
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
-            Text(
-              subtitle,
-              style: const TextStyle(fontSize: 12, color: Colors.white70),
-            ),
-          ],
-        ),
-      ],
     );
   }
 }
