@@ -1691,6 +1691,7 @@ class BeastTokenPainter extends CustomPainter {
       ),
       p,
     );
+    
 
     final t1 = Path()
       ..moveTo(c.dx - size.width * 0.05, c.dy)
