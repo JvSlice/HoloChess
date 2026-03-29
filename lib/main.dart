@@ -26,42 +26,13 @@ class DejairkApp extends StatelessWidget {
   }
 }
 
-/// ===============================================================
-/// VERSION NOTE
-/// Change this when you push meaningful gameplay updates.
-/// Visible in the UI so you can confirm deploys.
-/// ===============================================================
-const String gameVersion = 'v0.5.0-round-combat';
-
-/// ===============================================================
-/// CORE ENUMS
-/// ===============================================================
+/// Change this whenever you push a meaningful update.
+const String gameVersion = 'v0.6.0-contextual-combat';
 
 enum PlayerSide { cyan, red }
-
 enum Difficulty { easy, medium, hard }
-
 enum GameMode { vsAI, local }
-
-enum UnitType {
-  brute,
-  striker,
-  mystic,
-  tentacle,
-}
-
-enum TurnAction {
-  moveAttack,
-  attackOnly,
-  moveAbility,
-}
-
-enum InteractionPhase {
-  idle,
-  choosingMove,
-  choosingAttackTarget,
-  choosingAbilityMove,
-}
+enum UnitType { brute, striker, mystic, tentacle }
 
 extension PlayerSideX on PlayerSide {
   PlayerSide get opponent =>
@@ -108,25 +79,6 @@ extension GameModeX on GameMode {
   }
 }
 
-extension TurnActionX on TurnAction {
-  String get label {
-    switch (this) {
-      case TurnAction.moveAttack:
-        return 'Move + Attack';
-      case TurnAction.attackOnly:
-        return 'Attack Only';
-      case TurnAction.moveAbility:
-        return 'Move + Ability';
-    }
-  }
-}
-
-/// ===============================================================
-/// ROUND BOARD POSITION
-/// ring   = distance from center
-/// sector = slice around the circle
-/// ===============================================================
-
 class BoardPos {
   final int ring;
   final int sector;
@@ -143,12 +95,6 @@ class BoardPos {
   @override
   String toString() => '($ring,$sector)';
 }
-
-/// ===============================================================
-/// UNIT DATA
-/// Main balance point:
-/// hp / atk / range / move
-/// ===============================================================
 
 class Unit {
   final String id;
@@ -184,8 +130,6 @@ class Unit {
       move: move,
     );
   }
-
-  bool get isAlive => hp > 0;
 
   String get shortName {
     switch (type) {
@@ -263,14 +207,6 @@ class Unit {
   }
 }
 
-/// ===============================================================
-/// GAME STATE
-/// Board shape:
-/// 3 rings x 8 sectors = 24 spaces
-/// Easy hack point:
-/// change ringCount / sectorCount to grow the board
-/// ===============================================================
-
 class GameState {
   static const int ringCount = 3;
   static const int sectorCount = 8;
@@ -296,13 +232,11 @@ class GameState {
   factory GameState.initial() {
     final units = <BoardPos, Unit>{};
 
-    // Cyan side
     units[const BoardPos(2, 7)] = Unit.make(PlayerSide.cyan, UnitType.brute, 0);
     units[const BoardPos(2, 0)] = Unit.make(PlayerSide.cyan, UnitType.striker, 0);
     units[const BoardPos(2, 1)] = Unit.make(PlayerSide.cyan, UnitType.mystic, 0);
     units[const BoardPos(1, 0)] = Unit.make(PlayerSide.cyan, UnitType.tentacle, 0);
 
-    // Red side
     units[const BoardPos(2, 3)] = Unit.make(PlayerSide.red, UnitType.brute, 0);
     units[const BoardPos(2, 4)] = Unit.make(PlayerSide.red, UnitType.striker, 0);
     units[const BoardPos(2, 5)] = Unit.make(PlayerSide.red, UnitType.mystic, 0);
@@ -320,13 +254,12 @@ class GameState {
   }
 
   GameState copy() {
-    final copiedUnits = <BoardPos, Unit>{};
+    final copied = <BoardPos, Unit>{};
     for (final entry in units.entries) {
-      copiedUnits[entry.key] = entry.value.copy();
+      copied[entry.key] = entry.value.copy();
     }
-
     return GameState(
-      units: copiedUnits,
+      units: copied,
       turn: turn,
       status: status,
       gameOver: gameOver,
@@ -337,17 +270,12 @@ class GameState {
   }
 
   Unit? unitAt(BoardPos pos) => units[pos];
-
   bool isOccupied(BoardPos pos) => units.containsKey(pos);
 
   List<MapEntry<BoardPos, Unit>> unitsFor(PlayerSide side) {
     return units.entries.where((e) => e.value.owner == side).toList();
   }
 }
-
-/// ===============================================================
-/// ROUND BOARD RULES
-/// ===============================================================
 
 class Rules {
   static int wrapSector(int sector) {
@@ -360,14 +288,12 @@ class Rules {
       BoardPos(pos.ring, wrapSector(pos.sector + 1)),
       BoardPos(pos.ring, wrapSector(pos.sector - 1)),
     ];
-
     if (pos.ring > 0) {
       result.add(BoardPos(pos.ring - 1, pos.sector));
     }
     if (pos.ring < GameState.ringCount - 1) {
       result.add(BoardPos(pos.ring + 1, pos.sector));
     }
-
     return result;
   }
 
@@ -388,7 +314,6 @@ class Rules {
         }
       }
     }
-
     return 999;
   }
 
@@ -406,13 +331,11 @@ class Rules {
     while (queue.isNotEmpty) {
       final current = queue.removeAt(0);
       final currentDist = visited[current]!;
-
       if (currentDist >= moveValue) continue;
 
       for (final next in adjacent(current)) {
         if (state.isOccupied(next)) continue;
         if (visited.containsKey(next)) continue;
-
         visited[next] = currentDist + 1;
         result.add(next);
         queue.add(next);
@@ -430,14 +353,12 @@ class Rules {
   }) {
     final attackRange = overrideRange ?? attacker.range;
     final result = <BoardPos>[];
-
     for (final entry in state.units.entries) {
       if (entry.value.owner == attacker.owner) continue;
       if (distance(from, entry.key) <= attackRange) {
         result.add(entry.key);
       }
     }
-
     return result;
   }
 
@@ -451,10 +372,8 @@ class Rules {
     if (defender == null) return;
 
     defender.hp -= damage;
-
     if (defender.hp <= 0) {
       state.units.remove(defenderPos);
-
       if (attacker.owner == PlayerSide.cyan) {
         state.cyanScore += defender.maxHp + defender.atk;
       } else {
@@ -482,7 +401,6 @@ class Rules {
       state.status = 'Red wins!';
       return;
     }
-
     if (redAlive.isEmpty) {
       state.gameOver = true;
       state.winner = PlayerSide.cyan;
@@ -511,29 +429,23 @@ class Rules {
           }
         }
         break;
-
       case UnitType.striker:
-        // Sprint effect is handled by giving +1 move in UI.
         break;
-
       case UnitType.mystic:
         unit.hp = math.min(unit.maxHp, unit.hp + 2);
         break;
-
       case UnitType.tentacle:
         final targets = enemiesInRange(state, destination, unit, overrideRange: 3);
         if (targets.isNotEmpty) {
-          targets.sort((a, b) => distance(destination, a).compareTo(distance(destination, b)));
+          targets.sort(
+            (a, b) => distance(destination, a).compareTo(distance(destination, b)),
+          );
           applyDamage(state, unit, targets.first, 1);
         }
         break;
     }
   }
 }
-
-/// ===============================================================
-/// SIMPLE AI
-/// ===============================================================
 
 class HoloAI {
   final Difficulty difficulty;
@@ -565,10 +477,10 @@ class HoloAI {
         if (score > bestScore) {
           bestScore = score;
           bestChoice = _AiChoice(
-            action: TurnAction.attackOnly,
             from: from,
             moveTo: null,
             attackTarget: target,
+            useAbility: false,
           );
         }
       }
@@ -585,34 +497,33 @@ class HoloAI {
           if (score > bestScore) {
             bestScore = score;
             bestChoice = _AiChoice(
-              action: TurnAction.moveAttack,
               from: from,
               moveTo: moveTo,
               attackTarget: null,
+              useAbility: false,
             );
           }
         } else {
           for (final target in targets) {
             final sim2 = sim.copy();
-            final simMovedUnit = sim2.unitAt(moveTo)!;
-            Rules.applyDamage(sim2, simMovedUnit, target, simMovedUnit.atk);
+            final moved = sim2.unitAt(moveTo)!;
+            Rules.applyDamage(sim2, moved, target, moved.atk);
             Rules.endTurn(sim2);
             final score = _evaluate(sim2);
             if (score > bestScore) {
               bestScore = score;
               bestChoice = _AiChoice(
-                action: TurnAction.moveAttack,
                 from: from,
                 moveTo: moveTo,
                 attackTarget: target,
+                useAbility: false,
               );
             }
           }
         }
       }
 
-      final abilityMove =
-          unit.type == UnitType.striker ? unit.move + 1 : unit.move;
+      final abilityMove = unit.type == UnitType.striker ? unit.move + 1 : unit.move;
       final abilityMoves = Rules.reachableMoves(
         state,
         from,
@@ -629,10 +540,10 @@ class HoloAI {
         if (score > bestScore) {
           bestScore = score;
           bestChoice = _AiChoice(
-            action: TurnAction.moveAbility,
             from: from,
             moveTo: moveTo,
             attackTarget: null,
+            useAbility: true,
           );
         }
       }
@@ -652,20 +563,20 @@ class HoloAI {
     final attacks = Rules.enemiesInRange(state, from, unit);
     if (attacks.isNotEmpty) {
       return _AiChoice(
-        action: TurnAction.attackOnly,
         from: from,
         moveTo: null,
         attackTarget: attacks[_random.nextInt(attacks.length)],
+        useAbility: false,
       );
     }
 
     final moves = Rules.reachableMoves(state, from, unit);
     if (moves.isNotEmpty) {
       return _AiChoice(
-        action: TurnAction.moveAbility,
         from: from,
         moveTo: moves[_random.nextInt(moves.length)],
         attackTarget: null,
+        useAbility: false,
       );
     }
 
@@ -679,7 +590,6 @@ class HoloAI {
     }
 
     int score = 0;
-
     for (final entry in state.units.entries) {
       final pos = entry.key;
       final unit = entry.value;
@@ -696,39 +606,34 @@ class HoloAI {
 
     score += state.redScore * 2;
     score -= state.cyanScore * 2;
-
     return score;
   }
 }
 
 class _AiChoice {
-  final TurnAction? action;
   final BoardPos? from;
   final BoardPos? moveTo;
   final BoardPos? attackTarget;
+  final bool useAbility;
 
   _AiChoice({
-    required this.action,
     required this.from,
     required this.moveTo,
     required this.attackTarget,
+    required this.useAbility,
   });
 
   factory _AiChoice.none() {
     return _AiChoice(
-      action: null,
       from: null,
       moveTo: null,
       attackTarget: null,
+      useAbility: false,
     );
   }
 
-  bool get isValid => action != null && from != null;
+  bool get isValid => from != null;
 }
-
-/// ===============================================================
-/// MAIN GAME PAGE
-/// ===============================================================
 
 class GamePage extends StatefulWidget {
   const GamePage({super.key});
@@ -742,13 +647,12 @@ class _GamePageState extends State<GamePage> {
 
   Difficulty difficulty = Difficulty.medium;
   GameMode mode = GameMode.vsAI;
-  TurnAction currentAction = TurnAction.moveAttack;
-
   bool showControls = false;
 
   BoardPos? selectedPos;
   BoardPos? pendingMoveDestination;
-  InteractionPhase phase = InteractionPhase.idle;
+  bool choosingAbility = false;
+  bool awaitingPostMoveAttack = false;
 
   List<BoardPos> highlightedMoves = [];
   List<BoardPos> highlightedTargets = [];
@@ -768,7 +672,8 @@ class _GamePageState extends State<GamePage> {
       state = GameState.initial();
       selectedPos = null;
       pendingMoveDestination = null;
-      phase = InteractionPhase.idle;
+      choosingAbility = false;
+      awaitingPostMoveAttack = false;
       highlightedMoves = [];
       highlightedTargets = [];
       aiBusy = false;
@@ -778,7 +683,8 @@ class _GamePageState extends State<GamePage> {
   void clearSelection() {
     selectedPos = null;
     pendingMoveDestination = null;
-    phase = InteractionPhase.idle;
+    choosingAbility = false;
+    awaitingPostMoveAttack = false;
     highlightedMoves = [];
     highlightedTargets = [];
   }
@@ -790,32 +696,30 @@ class _GamePageState extends State<GamePage> {
     setState(() {
       selectedPos = pos;
       pendingMoveDestination = null;
+      choosingAbility = false;
+      awaitingPostMoveAttack = false;
+      highlightedMoves = Rules.reachableMoves(state, pos, unit);
+      highlightedTargets = Rules.enemiesInRange(state, pos, unit);
+      state.status = 'Choose a move, attack, or ability';
+    });
+  }
 
-      switch (currentAction) {
-        case TurnAction.moveAttack:
-          phase = InteractionPhase.choosingMove;
-          highlightedMoves = Rules.reachableMoves(state, pos, unit);
-          highlightedTargets = [];
-          state.status = 'Choose move destination';
-          break;
-        case TurnAction.attackOnly:
-          phase = InteractionPhase.choosingAttackTarget;
-          highlightedMoves = [];
-          highlightedTargets = Rules.enemiesInRange(state, pos, unit);
-          state.status = 'Choose attack target';
-          break;
-        case TurnAction.moveAbility:
-          phase = InteractionPhase.choosingAbilityMove;
-          highlightedMoves = Rules.reachableMoves(
-            state,
-            pos,
-            unit,
-            overrideMove: unit.type == UnitType.striker ? unit.move + 1 : unit.move,
-          );
-          highlightedTargets = [];
-          state.status = 'Choose ability move';
-          break;
-      }
+  void startAbilityMode() {
+    if (selectedPos == null) return;
+    final unit = state.unitAt(selectedPos!);
+    if (unit == null) return;
+
+    setState(() {
+      choosingAbility = true;
+      awaitingPostMoveAttack = false;
+      highlightedTargets = [];
+      highlightedMoves = Rules.reachableMoves(
+        state,
+        selectedPos!,
+        unit,
+        overrideMove: unit.type == UnitType.striker ? unit.move + 1 : unit.move,
+      );
+      state.status = 'Choose destination for ${unit.abilityName}';
     });
   }
 
@@ -833,70 +737,73 @@ class _GamePageState extends State<GamePage> {
     final selectedUnit = state.unitAt(selectedPos!);
     if (selectedUnit == null) return;
 
-    switch (phase) {
-      case InteractionPhase.idle:
-        return;
+    if (choosingAbility) {
+      if (!highlightedMoves.contains(tappedPos)) return;
 
-      case InteractionPhase.choosingMove:
-        if (!highlightedMoves.contains(tappedPos)) return;
-
-        setState(() {
-          pendingMoveDestination = tappedPos;
-        });
-
-        final sim = state.copy();
-        final simUnit = sim.unitAt(selectedPos!)!;
-        Rules.moveUnit(sim, selectedPos!, tappedPos);
-        final targets = Rules.enemiesInRange(sim, tappedPos, simUnit);
-
-        if (targets.isEmpty) {
-          setState(() {
-            Rules.moveUnit(state, selectedPos!, tappedPos);
-            Rules.endTurn(state);
-            clearSelection();
-          });
-          _maybeRunAi();
-        } else {
-          setState(() {
-            phase = InteractionPhase.choosingAttackTarget;
-            highlightedMoves = [];
-            highlightedTargets = targets;
-            state.status = 'Choose target to attack';
-          });
-        }
-        return;
-
-      case InteractionPhase.choosingAttackTarget:
-        if (!highlightedTargets.contains(tappedPos)) return;
-
-        setState(() {
-          if (pendingMoveDestination != null) {
-            Rules.moveUnit(state, selectedPos!, pendingMoveDestination!);
-            final movedUnit = state.unitAt(pendingMoveDestination!)!;
-            Rules.applyDamage(state, movedUnit, tappedPos, movedUnit.atk);
-          } else {
-            final attacker = state.unitAt(selectedPos!)!;
-            Rules.applyDamage(state, attacker, tappedPos, attacker.atk);
-          }
-
-          Rules.endTurn(state);
-          clearSelection();
-        });
-        _maybeRunAi();
-        return;
-
-      case InteractionPhase.choosingAbilityMove:
-        if (!highlightedMoves.contains(tappedPos)) return;
-
-        setState(() {
-          final caster = state.unitAt(selectedPos!)!;
-          Rules.performAbility(state, selectedPos!, tappedPos, caster);
-          Rules.endTurn(state);
-          clearSelection();
-        });
-        _maybeRunAi();
-        return;
+      setState(() {
+        final caster = state.unitAt(selectedPos!)!;
+        Rules.performAbility(state, selectedPos!, tappedPos, caster);
+        Rules.endTurn(state);
+        clearSelection();
+      });
+      _maybeRunAi();
+      return;
     }
+
+    if (highlightedTargets.contains(tappedPos) && !awaitingPostMoveAttack) {
+      setState(() {
+        final attacker = state.unitAt(selectedPos!)!;
+        Rules.applyDamage(state, attacker, tappedPos, attacker.atk);
+        Rules.endTurn(state);
+        clearSelection();
+      });
+      _maybeRunAi();
+      return;
+    }
+
+    if (highlightedMoves.contains(tappedPos) && !awaitingPostMoveAttack) {
+      final sim = state.copy();
+      final simUnit = sim.unitAt(selectedPos!)!;
+      Rules.moveUnit(sim, selectedPos!, tappedPos);
+      final postMoveTargets = Rules.enemiesInRange(sim, tappedPos, simUnit);
+
+      setState(() {
+        pendingMoveDestination = tappedPos;
+        highlightedMoves = [];
+        highlightedTargets = postMoveTargets;
+        awaitingPostMoveAttack = true;
+
+        if (postMoveTargets.isEmpty) {
+          Rules.moveUnit(state, selectedPos!, tappedPos);
+          Rules.endTurn(state);
+          clearSelection();
+        } else {
+          state.status = 'Choose target after moving';
+        }
+      });
+
+      if (selectedPos == null) {
+        _maybeRunAi();
+      }
+      return;
+    }
+
+    if (awaitingPostMoveAttack && highlightedTargets.contains(tappedPos)) {
+      setState(() {
+        Rules.moveUnit(state, selectedPos!, pendingMoveDestination!);
+        final movedUnit = state.unitAt(pendingMoveDestination!)!;
+        Rules.applyDamage(state, movedUnit, tappedPos, movedUnit.atk);
+        Rules.endTurn(state);
+        clearSelection();
+      });
+      _maybeRunAi();
+      return;
+    }
+
+    setState(() {
+      clearSelection();
+      state.status = '${state.turn.label} to move';
+    });
   }
 
   Future<void> _maybeRunAi() async {
@@ -941,36 +848,19 @@ class _GamePageState extends State<GamePage> {
         return;
       }
 
-      switch (choice.action!) {
-        case TurnAction.attackOnly:
-          if (choice.attackTarget != null) {
-            Rules.applyDamage(state, unit, choice.attackTarget!, unit.atk);
-          }
-          Rules.endTurn(state);
-          break;
-
-        case TurnAction.moveAttack:
-          if (choice.moveTo != null) {
-            Rules.moveUnit(state, choice.from!, choice.moveTo!);
-            final movedUnit = state.unitAt(choice.moveTo!)!;
-            if (choice.attackTarget != null) {
-              Rules.applyDamage(
-                state,
-                movedUnit,
-                choice.attackTarget!,
-                movedUnit.atk,
-              );
-            }
-          }
-          Rules.endTurn(state);
-          break;
-
-        case TurnAction.moveAbility:
-          if (choice.moveTo != null) {
-            Rules.performAbility(state, choice.from!, choice.moveTo!, unit);
-          }
-          Rules.endTurn(state);
-          break;
+      if (choice.useAbility && choice.moveTo != null) {
+        Rules.performAbility(state, choice.from!, choice.moveTo!, unit);
+        Rules.endTurn(state);
+      } else if (choice.moveTo != null) {
+        Rules.moveUnit(state, choice.from!, choice.moveTo!);
+        final moved = state.unitAt(choice.moveTo!)!;
+        if (choice.attackTarget != null) {
+          Rules.applyDamage(state, moved, choice.attackTarget!, moved.atk);
+        }
+        Rules.endTurn(state);
+      } else if (choice.attackTarget != null) {
+        Rules.applyDamage(state, unit, choice.attackTarget!, unit.atk);
+        Rules.endTurn(state);
       }
 
       aiBusy = false;
@@ -1081,6 +971,9 @@ class _GamePageState extends State<GamePage> {
   }
 
   Widget _buildControlsPanel({required bool alwaysExpanded}) {
+    final selectedUnit =
+        selectedPos == null ? null : state.unitAt(selectedPos!);
+
     return HoloPanel(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1118,28 +1011,6 @@ class _GamePageState extends State<GamePage> {
           ),
           const SizedBox(height: 12),
           const Text(
-            'Action This Turn',
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 6,
-            runSpacing: 6,
-            children: TurnAction.values.map((a) {
-              return _choiceChip(
-                text: a.label,
-                selected: currentAction == a,
-                onTap: () {
-                  setState(() {
-                    currentAction = a;
-                    clearSelection();
-                  });
-                },
-              );
-            }).toList(),
-          ),
-          const SizedBox(height: 12),
-          const Text(
             'AI Difficulty',
             style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
           ),
@@ -1159,14 +1030,45 @@ class _GamePageState extends State<GamePage> {
               );
             }).toList(),
           ),
+          if (selectedUnit != null) ...[
+            const SizedBox(height: 12),
+            const Text(
+              'Selected Unit',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              '${selectedUnit.shortName}  |  HP ${selectedUnit.hp}/${selectedUnit.maxHp}  |  ATK ${selectedUnit.atk}  |  RNG ${selectedUnit.range}  |  MOV ${selectedUnit.move}',
+            ),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: [
+                _choiceChip(
+                  text: 'Ability',
+                  selected: choosingAbility,
+                  onTap: startAbilityMode,
+                ),
+                _choiceChip(
+                  text: 'Clear',
+                  selected: false,
+                  onTap: () {
+                    setState(() {
+                      clearSelection();
+                      state.status = '${state.turn.label} to move';
+                    });
+                  },
+                ),
+              ],
+            ),
+          ],
           const SizedBox(height: 12),
           Text('Mode: ${mode.label}'),
           const SizedBox(height: 4),
           Text('Turn: ${state.turn.label}'),
           const SizedBox(height: 4),
           Text('Selected: ${_selectedText()}'),
-          const SizedBox(height: 4),
-          Text('Phase: ${phase.name}'),
           const SizedBox(height: 4),
           Text('Game Over: ${state.gameOver ? "Yes" : "No"}'),
           if (state.winner != null) ...[
@@ -1180,13 +1082,13 @@ class _GamePageState extends State<GamePage> {
               style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
-            const Text('Brute  | HP 8 | ATK 3 | RNG 1 | MOV 1 | Shockwave'),
+            const Text('Brute   | HP 8 | ATK 3 | RNG 1 | MOV 1 | Shockwave'),
             const SizedBox(height: 6),
-            const Text('Striker| HP 5 | ATK 2 | RNG 1 | MOV 2 | Sprint'),
+            const Text('Striker | HP 5 | ATK 2 | RNG 1 | MOV 2 | Sprint'),
             const SizedBox(height: 6),
-            const Text('Mystic | HP 6 | ATK 2 | RNG 2 | MOV 1 | Heal'),
+            const Text('Mystic  | HP 6 | ATK 2 | RNG 2 | MOV 1 | Heal'),
             const SizedBox(height: 6),
-            const Text('Tentacl| HP 5 | ATK 2 | RNG 2 | MOV 1 | Beam Lash'),
+            const Text('Tentacle| HP 5 | ATK 2 | RNG 2 | MOV 1 | Beam Lash'),
           ],
         ],
       ),
@@ -1308,26 +1210,19 @@ class _GamePageState extends State<GamePage> {
           title: const Text('How to Play'),
           content: const SingleChildScrollView(
             child: Text(
-              'This version uses round holo combat rules.\n\n'
-              'Each unit has:\n'
-              '• HP = health\n'
-              '• ATK = damage dealt\n'
-              '• RNG = attack range\n'
-              '• MOV = move distance\n\n'
-              'Turn options:\n'
-              '• Move + Attack\n'
-              '• Attack Only\n'
-              '• Move + Ability\n\n'
-              'Movement uses round-board adjacency:\n'
+              'Tap a unit.\n\n'
+              'The board will show:\n'
+              '• yellow = valid moves\n'
+              '• red = enemies you can attack now\n\n'
+              'Flow:\n'
+              '• tap red target = attack now\n'
+              '• tap yellow move = move first, then attack if possible\n'
+              '• tap Ability in controls = use that unit’s special move\n\n'
+              'Board logic uses round adjacency:\n'
               '• around the orbit\n'
               '• or along the ray\n'
               '• no diagonals\n\n'
-              'Win by eliminating the other side.\n\n'
-              'Abilities:\n'
-              '• Brute: shockwave nearby enemies\n'
-              '• Striker: sprint farther\n'
-              '• Mystic: heal self\n'
-              '• Tentacle: beam nearest target\n',
+              'Win by eliminating the other side.\n',
             ),
           ),
           actions: [
@@ -1393,10 +1288,6 @@ class _GamePageState extends State<GamePage> {
   }
 }
 
-/// ===============================================================
-/// ROUND COMBAT BOARD
-/// ===============================================================
-
 class CombatBoard extends StatelessWidget {
   final GameState state;
   final BoardPos? selectedPos;
@@ -1442,8 +1333,8 @@ class CombatBoard extends StatelessWidget {
   Positioned _buildCell(double side, BoardPos pos) {
     final point = _cellCenter(side, pos);
     final radius = side * 0.055;
-
     final unit = state.unitAt(pos);
+
     final isSelected = selectedPos == pos;
     final isMove = highlightedMoves.contains(pos);
     final isTarget = highlightedTargets.contains(pos);
@@ -1491,11 +1382,7 @@ class CombatBoard extends StatelessWidget {
                     ]
                   : null,
             ),
-            child: unit == null
-                ? const SizedBox.shrink()
-                : Center(
-                    child: BeastToken(unit: unit),
-                  ),
+            child: unit == null ? const SizedBox.shrink() : Center(child: BeastToken(unit: unit)),
           ),
         ),
       ),
@@ -1505,8 +1392,6 @@ class CombatBoard extends StatelessWidget {
   Offset _cellCenter(double side, BoardPos pos) {
     final center = Offset(side / 2, side / 2);
     final maxRadius = side * 0.38;
-
-    // ring 0 near center, ring 2 near outer ring
     final ringStep = maxRadius / GameState.ringCount;
     final radius = ringStep * (pos.ring + 1);
 
@@ -1519,10 +1404,6 @@ class CombatBoard extends StatelessWidget {
     );
   }
 }
-
-/// ===============================================================
-/// MONSTER TOKEN VISUALS
-/// ===============================================================
 
 class BeastToken extends StatelessWidget {
   final Unit unit;
@@ -1665,8 +1546,16 @@ class BeastTokenPainter extends CustomPainter {
     final c = size.center(Offset.zero);
 
     canvas.drawCircle(c.translate(0, -size.height * 0.06), size.width * 0.09, p);
-    canvas.drawCircle(c.translate(-size.width * 0.10, size.height * 0.04), size.width * 0.07, p);
-    canvas.drawCircle(c.translate(size.width * 0.10, size.height * 0.04), size.width * 0.07, p);
+    canvas.drawCircle(
+      c.translate(-size.width * 0.10, size.height * 0.04),
+      size.width * 0.07,
+      p,
+    );
+    canvas.drawCircle(
+      c.translate(size.width * 0.10, size.height * 0.04),
+      size.width * 0.07,
+      p,
+    );
 
     canvas.drawLine(
       Offset(c.dx, c.dy - size.height * 0.18),
@@ -1691,7 +1580,6 @@ class BeastTokenPainter extends CustomPainter {
       ),
       p,
     );
-    
 
     final t1 = Path()
       ..moveTo(c.dx - size.width * 0.05, c.dy)
@@ -1730,13 +1618,8 @@ class BeastTokenPainter extends CustomPainter {
     final left = (size.width - width) / 2;
     final top = size.height * 0.80;
 
-    final bg = Paint()
-      ..color = Colors.white24
-      ..style = PaintingStyle.fill;
-
-    final fg = Paint()
-      ..color = Colors.white.withOpacity(0.9)
-      ..style = PaintingStyle.fill;
+    final bg = Paint()..color = Colors.white24;
+    final fg = Paint()..color = Colors.white.withOpacity(0.9);
 
     canvas.drawRRect(
       RRect.fromRectAndRadius(
@@ -1763,10 +1646,6 @@ class BeastTokenPainter extends CustomPainter {
         oldDelegate.unit.hp != unit.hp;
   }
 }
-
-/// ===============================================================
-/// ROUND BOARD PAINTER
-/// ===============================================================
 
 class RoundBoardPainter extends CustomPainter {
   @override
@@ -1798,7 +1677,6 @@ class RoundBoardPainter extends CustomPainter {
     canvas.drawCircle(center, maxRadius, outerGlow);
 
     final ringStep = maxRadius / GameState.ringCount;
-
     for (int r = 1; r <= GameState.ringCount; r++) {
       canvas.drawCircle(center, ringStep * r, ringPaint);
     }
@@ -1823,10 +1701,6 @@ class RoundBoardPainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
-
-/// ===============================================================
-/// UI HELPERS
-/// ===============================================================
 
 class HoloPanel extends StatelessWidget {
   final Widget child;
