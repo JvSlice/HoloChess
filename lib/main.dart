@@ -5,7 +5,7 @@ void main() {
   runApp(const HoloApp());
 }
 
-const String gameVersion = 'v0.7.2-cinematic-ai-fixed';
+const String gameVersion = 'v0.7.3-panel-slot-fix';
 
 class HoloApp extends StatelessWidget {
   const HoloApp({super.key});
@@ -37,9 +37,8 @@ enum Difficulty { easy, medium, hard }
 enum UnitType { brute, striker, mystic, tentacle }
 
 extension PlayerSideX on PlayerSide {
-  Color get color => this == PlayerSide.cyan
-      ? const Color(0xFF58F3FF)
-      : const Color(0xFFFF5A93);
+  Color get color =>
+      this == PlayerSide.cyan ? const Color(0xFF58F3FF) : const Color(0xFFFF5A93);
 
   String get label => this == PlayerSide.cyan ? 'Player 1' : 'Player 2';
 
@@ -99,10 +98,20 @@ class Unit {
   int hp;
   bool abilityUsedThisTurn;
 
-  Unit(this.type, this.owner, this.hp, {this.abilityUsedThisTurn = false});
+  Unit(
+    this.type,
+    this.owner,
+    this.hp, {
+    this.abilityUsedThisTurn = false,
+  });
 
   Unit copy() {
-    return Unit(type, owner, hp, abilityUsedThisTurn: abilityUsedThisTurn);
+    return Unit(
+      type,
+      owner,
+      hp,
+      abilityUsedThisTurn: abilityUsedThisTurn,
+    );
   }
 
   int get maxHp {
@@ -248,6 +257,7 @@ class GameState {
   factory GameState.initial() {
     final units = <BoardPos, Unit>{};
 
+    // Opposite-side layout restored.
     units[const BoardPos(2, 7)] = Unit(UnitType.brute, PlayerSide.cyan, 12);
     units[const BoardPos(2, 0)] = Unit(UnitType.striker, PlayerSide.cyan, 8);
     units[const BoardPos(2, 1)] = Unit(UnitType.mystic, PlayerSide.cyan, 10);
@@ -350,8 +360,7 @@ class Rules {
       BoardPos(pos.ring, wrapSector(pos.sector + 1)),
       BoardPos(pos.ring, wrapSector(pos.sector - 1)),
       if (pos.ring > 0) BoardPos(pos.ring - 1, pos.sector),
-      if (pos.ring < GameState.ringCount - 1)
-        BoardPos(pos.ring + 1, pos.sector),
+      if (pos.ring < GameState.ringCount - 1) BoardPos(pos.ring + 1, pos.sector),
     ];
   }
 
@@ -397,11 +406,7 @@ class Rules {
     return result.toList();
   }
 
-  static List<BoardPos> getAbilityMoves(
-    GameState state,
-    Unit unit,
-    BoardPos start,
-  ) {
+  static List<BoardPos> getAbilityMoves(GameState state, Unit unit, BoardPos start) {
     final movement = unit.type == UnitType.striker ? unit.move + 1 : unit.move;
     final visited = <BoardPos, int>{start: 0};
     final queue = <BoardPos>[start];
@@ -432,12 +437,7 @@ class Rules {
         .toList();
   }
 
-  static void performAbility(
-    GameState state,
-    Unit unit,
-    BoardPos from,
-    BoardPos to,
-  ) {
+  static void performAbility(GameState state, Unit unit, BoardPos from, BoardPos to) {
     state.move(from, to);
     unit.abilityUsedThisTurn = true;
 
@@ -462,9 +462,7 @@ class Rules {
             .toList();
 
         if (enemies.isNotEmpty) {
-          enemies.sort(
-            (a, b) => distance(to, a.key).compareTo(distance(to, b.key)),
-          );
+          enemies.sort((a, b) => distance(to, a.key).compareTo(distance(to, b.key)));
           state.damage(enemies.first.key, 1, source: unit.owner);
         }
         break;
@@ -519,22 +517,12 @@ class CinematicAI {
 
         if (afterTargets.isEmpty) {
           actions.add(
-            AiChoice(
-              from: from,
-              moveTo: moveTo,
-              target: null,
-              useAbility: false,
-            ),
+            AiChoice(from: from, moveTo: moveTo, target: null, useAbility: false),
           );
         } else {
           for (final target in afterTargets) {
             actions.add(
-              AiChoice(
-                from: from,
-                moveTo: moveTo,
-                target: target,
-                useAbility: false,
-              ),
+              AiChoice(from: from, moveTo: moveTo, target: target, useAbility: false),
             );
           }
         }
@@ -544,12 +532,7 @@ class CinematicAI {
         final abilityMoves = Rules.getAbilityMoves(state, unit, from);
         for (final moveTo in abilityMoves) {
           actions.add(
-            AiChoice(
-              from: from,
-              moveTo: moveTo,
-              target: null,
-              useAbility: true,
-            ),
+            AiChoice(from: from, moveTo: moveTo, target: null, useAbility: true),
           );
         }
       }
@@ -681,12 +664,8 @@ class CinematicAI {
 
       case UnitType.striker:
         score += finalPos.ring * 4;
-        if (action.target != null) {
-          score += 10;
-        }
-        if (action.useAbility) {
-          score += 12;
-        }
+        if (action.target != null) score += 10;
+        if (action.useAbility) score += 12;
         break;
 
       case UnitType.mystic:
@@ -694,18 +673,14 @@ class CinematicAI {
           score += 28;
         }
         score += math.min(nearestEnemyDistance.toDouble(), 3) * 5;
-        if (action.target != null) {
-          score += 8;
-        }
+        if (action.target != null) score += 8;
         break;
 
       case UnitType.tentacle:
         if (nearestEnemyDistance >= 2 && nearestEnemyDistance <= 3) {
           score += 18;
         }
-        if (action.useAbility) {
-          score += 16;
-        }
+        if (action.useAbility) score += 16;
         break;
     }
 
@@ -854,9 +829,7 @@ class _GamePageState extends State<GamePage> {
       return;
     }
 
-    if (waitingForPostMoveAttack &&
-        pendingMove != null &&
-        targets.contains(pos)) {
+    if (waitingForPostMoveAttack && pendingMove != null && targets.contains(pos)) {
       setState(() {
         state.move(selected!, pendingMove!);
         state.damage(pos, unit.atk, source: unit.owner);
@@ -953,8 +926,7 @@ class _GamePageState extends State<GamePage> {
     final center = Offset(boardSize / 2, boardSize / 2);
     final radiusStep = boardSize * 0.38 / GameState.ringCount;
     final radius = (pos.ring + 1) * radiusStep;
-    final angle =
-        (2 * math.pi / GameState.sectorCount) * pos.sector - math.pi / 2;
+    final angle = (2 * math.pi / GameState.sectorCount) * pos.sector - math.pi / 2;
 
     return Offset(
       center.dx + radius * math.cos(angle),
@@ -973,7 +945,9 @@ class _GamePageState extends State<GamePage> {
       onSelected: (_) => onTap(),
       selectedColor: const Color(0xFF173447),
       backgroundColor: const Color(0xFF0B1623),
-      side: BorderSide(color: selected ? Colors.cyanAccent : Colors.white24),
+      side: BorderSide(
+        color: selected ? Colors.cyanAccent : Colors.white24,
+      ),
       labelStyle: TextStyle(
         color: selected ? Colors.cyanAccent : Colors.white70,
         fontWeight: FontWeight.w700,
@@ -1041,7 +1015,10 @@ class _GamePageState extends State<GamePage> {
             onPressed: _showHowToPlay,
           ),
           const SizedBox(width: 6),
-          HoloIconMiniButton(icon: Icons.refresh, onPressed: restartGame),
+          HoloIconMiniButton(
+            icon: Icons.refresh,
+            onPressed: restartGame,
+          ),
           const SizedBox(width: 6),
           HoloIconMiniButton(
             icon: showControls ? Icons.expand_less : Icons.tune,
@@ -1083,6 +1060,34 @@ class _GamePageState extends State<GamePage> {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildSelectedPanelSlot(Unit? selectedUnit) {
+    return SizedBox(
+      height: 150,
+      child: selectedUnit == null
+          ? const HoloPanel(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Selected Unit',
+                    style: TextStyle(
+                      fontSize: 18,
+                      color: Colors.white38,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  SizedBox(height: 8),
+                  Text(
+                    'Tap a unit to see its stats and ability.',
+                    style: TextStyle(color: Colors.white38),
+                  ),
+                ],
+              ),
+            )
+          : _buildSelectedUnitPanel(selectedUnit),
     );
   }
 
@@ -1250,101 +1255,65 @@ class _GamePageState extends State<GamePage> {
                                     child: Stack(
                                       children: [
                                         CustomPaint(
-                                          size: const Size(
-                                            boardSize,
-                                            boardSize,
-                                          ),
+                                          size: const Size(boardSize, boardSize),
                                           painter: RoundBoardPainter(),
                                         ),
-                                        ...List.generate(GameState.ringCount, (
-                                          ring,
-                                        ) {
-                                          return List.generate(
-                                            GameState.sectorCount,
-                                            (sector) {
-                                              final pos = BoardPos(
-                                                ring,
-                                                sector,
-                                              );
-                                              final offset = getOffset(
-                                                pos,
-                                                boardSize,
-                                              );
-                                              final unit = state.unitAt(pos);
+                                        ...List.generate(GameState.ringCount, (ring) {
+                                          return List.generate(GameState.sectorCount, (sector) {
+                                            final pos = BoardPos(ring, sector);
+                                            final offset = getOffset(pos, boardSize);
+                                            final unit = state.unitAt(pos);
 
-                                              final isSelected =
-                                                  selected == pos;
-                                              final isMove = moves.contains(
-                                                pos,
-                                              );
-                                              final isTarget = targets.contains(
-                                                pos,
-                                              );
+                                            final isSelected = selected == pos;
+                                            final isMove = moves.contains(pos);
+                                            final isTarget = targets.contains(pos);
 
-                                              return Positioned(
-                                                left: offset.dx - 30,
-                                                top: offset.dy - 30,
-                                                width: 60,
-                                                height: 60,
-                                                child: GestureDetector(
-                                                  onTap: () =>
-                                                      unit != null &&
-                                                          unit.owner ==
-                                                              state.turn
-                                                      ? select(pos)
-                                                      : tap(pos),
-                                                  child: Container(
-                                                    decoration: BoxDecoration(
-                                                      shape: BoxShape.circle,
-                                                      color: isSelected
-                                                          ? const Color(
-                                                              0x2247F1FF,
-                                                            )
-                                                          : isMove
-                                                          ? const Color(
-                                                              0x22FFD56A,
-                                                            )
-                                                          : isTarget
-                                                          ? const Color(
-                                                              0x33FF5A93,
-                                                            )
-                                                          : Colors.transparent,
-                                                      border: Border.all(
-                                                        color: isSelected
-                                                            ? Colors.cyanAccent
-                                                            : isMove
-                                                            ? const Color(
-                                                                0xFFFFD56A,
-                                                              )
+                                            return Positioned(
+                                              left: offset.dx - 30,
+                                              top: offset.dy - 30,
+                                              width: 60,
+                                              height: 60,
+                                              child: GestureDetector(
+                                                onTap: () => unit != null &&
+                                                        unit.owner == state.turn
+                                                    ? select(pos)
+                                                    : tap(pos),
+                                                child: Container(
+                                                  decoration: BoxDecoration(
+                                                    shape: BoxShape.circle,
+                                                    color: isSelected
+                                                        ? const Color(0x2247F1FF)
+                                                        : isMove
+                                                            ? const Color(0x22FFD56A)
                                                             : isTarget
-                                                            ? Colors.redAccent
-                                                            : Colors
-                                                                  .transparent,
-                                                        width: 2,
-                                                      ),
+                                                                ? const Color(0x33FF5A93)
+                                                                : Colors.transparent,
+                                                    border: Border.all(
+                                                      color: isSelected
+                                                          ? Colors.cyanAccent
+                                                          : isMove
+                                                              ? const Color(0xFFFFD56A)
+                                                              : isTarget
+                                                                  ? Colors.redAccent
+                                                                  : Colors.transparent,
+                                                      width: 2,
                                                     ),
-                                                    child: unit == null
-                                                        ? const SizedBox.shrink()
-                                                        : Center(
-                                                            child: BeastToken(
-                                                              unit: unit,
-                                                            ),
-                                                          ),
                                                   ),
+                                                  child: unit == null
+                                                      ? const SizedBox.shrink()
+                                                      : Center(child: BeastToken(unit: unit)),
                                                 ),
-                                              );
-                                            },
-                                          );
+                                              ),
+                                            );
+                                          });
                                         }).expand((e) => e),
                                       ],
                                     ),
                                   ),
                                 ),
                               ),
-                              if (selectedUnit != null) ...[
-                                const SizedBox(height: 12),
-                                _buildSelectedUnitPanel(selectedUnit),
-                              ],
+                              const SizedBox(height: 12),
+                              _buildSelectedPanelSlot(selectedUnit),
                             ],
                           ),
                         ),
@@ -1358,19 +1327,10 @@ class _GamePageState extends State<GamePage> {
                                 const SizedBox(height: 8),
                                 HoloPanel(
                                   child: Row(
-                                    mainAxisAlignment:
-                                        MainAxisAlignment.spaceBetween,
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                     children: [
-                                      _scoreBlock(
-                                        'Player 1',
-                                        state.cyanScore,
-                                        Colors.cyanAccent,
-                                      ),
-                                      _scoreBlock(
-                                        'Player 2',
-                                        state.redScore,
-                                        Colors.redAccent,
-                                      ),
+                                      _scoreBlock('Player 1', state.cyanScore, Colors.cyanAccent),
+                                      _scoreBlock('Player 2', state.redScore, Colors.redAccent),
                                     ],
                                   ),
                                 ),
@@ -1396,89 +1356,68 @@ class _GamePageState extends State<GamePage> {
                                     painter: RoundBoardPainter(),
                                   ),
                                   ...List.generate(GameState.ringCount, (ring) {
-                                    return List.generate(
-                                      GameState.sectorCount,
-                                      (sector) {
-                                        final pos = BoardPos(ring, sector);
-                                        final offset = getOffset(
-                                          pos,
-                                          boardSize,
-                                        );
-                                        final unit = state.unitAt(pos);
+                                    return List.generate(GameState.sectorCount, (sector) {
+                                      final pos = BoardPos(ring, sector);
+                                      final offset = getOffset(pos, boardSize);
+                                      final unit = state.unitAt(pos);
 
-                                        final isSelected = selected == pos;
-                                        final isMove = moves.contains(pos);
-                                        final isTarget = targets.contains(pos);
+                                      final isSelected = selected == pos;
+                                      final isMove = moves.contains(pos);
+                                      final isTarget = targets.contains(pos);
 
-                                        return Positioned(
-                                          left: offset.dx - 30,
-                                          top: offset.dy - 30,
-                                          width: 60,
-                                          height: 60,
-                                          child: GestureDetector(
-                                            onTap: () =>
-                                                unit != null &&
-                                                    unit.owner == state.turn
-                                                ? select(pos)
-                                                : tap(pos),
-                                            child: Container(
-                                              decoration: BoxDecoration(
-                                                shape: BoxShape.circle,
-                                                color: isSelected
-                                                    ? const Color(0x2247F1FF)
-                                                    : isMove
-                                                    ? const Color(0x22FFD56A)
-                                                    : isTarget
-                                                    ? const Color(0x33FF5A93)
-                                                    : Colors.transparent,
-                                                border: Border.all(
-                                                  color: isSelected
-                                                      ? Colors.cyanAccent
-                                                      : isMove
-                                                      ? const Color(0xFFFFD56A)
+                                      return Positioned(
+                                        left: offset.dx - 30,
+                                        top: offset.dy - 30,
+                                        width: 60,
+                                        height: 60,
+                                        child: GestureDetector(
+                                          onTap: () => unit != null &&
+                                                  unit.owner == state.turn
+                                              ? select(pos)
+                                              : tap(pos),
+                                          child: Container(
+                                            decoration: BoxDecoration(
+                                              shape: BoxShape.circle,
+                                              color: isSelected
+                                                  ? const Color(0x2247F1FF)
+                                                  : isMove
+                                                      ? const Color(0x22FFD56A)
                                                       : isTarget
-                                                      ? Colors.redAccent
-                                                      : Colors.transparent,
-                                                  width: 2,
-                                                ),
+                                                          ? const Color(0x33FF5A93)
+                                                          : Colors.transparent,
+                                              border: Border.all(
+                                                color: isSelected
+                                                    ? Colors.cyanAccent
+                                                    : isMove
+                                                        ? const Color(0xFFFFD56A)
+                                                        : isTarget
+                                                            ? Colors.redAccent
+                                                            : Colors.transparent,
+                                                width: 2,
                                               ),
-                                              child: unit == null
-                                                  ? const SizedBox.shrink()
-                                                  : Center(
-                                                      child: BeastToken(
-                                                        unit: unit,
-                                                      ),
-                                                    ),
                                             ),
+                                            child: unit == null
+                                                ? const SizedBox.shrink()
+                                                : Center(child: BeastToken(unit: unit)),
                                           ),
-                                        );
-                                      },
-                                    );
+                                        ),
+                                      );
+                                    });
                                   }).expand((e) => e),
                                 ],
                               ),
                             ),
                           ),
                         ),
-                        if (selectedUnit != null) ...[
-                          const SizedBox(height: 10),
-                          _buildSelectedUnitPanel(selectedUnit),
-                        ],
+                        const SizedBox(height: 10),
+                        _buildSelectedPanelSlot(selectedUnit),
                         const SizedBox(height: 10),
                         HoloPanel(
                           child: Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              _scoreBlock(
-                                'Player 1',
-                                state.cyanScore,
-                                Colors.cyanAccent,
-                              ),
-                              _scoreBlock(
-                                'Player 2',
-                                state.redScore,
-                                Colors.redAccent,
-                              ),
+                              _scoreBlock('Player 1', state.cyanScore, Colors.cyanAccent),
+                              _scoreBlock('Player 2', state.redScore, Colors.redAccent),
                             ],
                           ),
                         ),
@@ -1538,7 +1477,11 @@ class RoundBoardPainter extends CustomPainter {
 
     final fill = Paint()
       ..shader = const RadialGradient(
-        colors: [Color(0x2200E7FF), Color(0x1100E7FF), Color(0x0300E7FF)],
+        colors: [
+          Color(0x2200E7FF),
+          Color(0x1100E7FF),
+          Color(0x0300E7FF),
+        ],
       ).createShader(Rect.fromCircle(center: center, radius: maxRadius));
 
     final outerGlow = Paint()
@@ -1591,7 +1534,9 @@ class BeastToken extends StatelessWidget {
     return SizedBox(
       width: 56,
       height: 56,
-      child: CustomPaint(painter: BeastTokenPainter(unit: unit)),
+      child: CustomPaint(
+        painter: BeastTokenPainter(unit: unit),
+      ),
     );
   }
 }
@@ -1616,16 +1561,13 @@ class BeastTokenPainter extends CustomPainter {
       ..strokeWidth = 2.1;
 
     final fill = Paint()
-      ..shader =
-          RadialGradient(
-            colors: [
-              color.withOpacity(0.30),
-              color.withOpacity(0.10),
-              color.withOpacity(0.02),
-            ],
-          ).createShader(
-            Rect.fromCircle(center: center, radius: size.width * 0.30),
-          );
+      ..shader = RadialGradient(
+        colors: [
+          color.withOpacity(0.30),
+          color.withOpacity(0.10),
+          color.withOpacity(0.02),
+        ],
+      ).createShader(Rect.fromCircle(center: center, radius: size.width * 0.30));
 
     canvas.drawCircle(center, size.width * 0.33, glow);
     canvas.drawCircle(center, size.width * 0.29, fill);
@@ -1782,21 +1724,9 @@ class BeastTokenPainter extends CustomPainter {
   void _drawMystic(Canvas canvas, Size size, Paint line) {
     final c = size.center(Offset.zero);
 
-    canvas.drawCircle(
-      c.translate(0, -size.height * 0.12),
-      size.width * 0.08,
-      line,
-    );
-    canvas.drawCircle(
-      c.translate(-size.width * 0.11, 0),
-      size.width * 0.07,
-      line,
-    );
-    canvas.drawCircle(
-      c.translate(size.width * 0.11, 0),
-      size.width * 0.07,
-      line,
-    );
+    canvas.drawCircle(c.translate(0, -size.height * 0.12), size.width * 0.08, line);
+    canvas.drawCircle(c.translate(-size.width * 0.11, 0), size.width * 0.07, line);
+    canvas.drawCircle(c.translate(size.width * 0.11, 0), size.width * 0.07, line);
 
     canvas.drawLine(
       Offset(c.dx, c.dy - size.height * 0.02),
@@ -1897,7 +1827,10 @@ class BeastTokenPainter extends CustomPainter {
       textDirection: TextDirection.ltr,
     )..layout();
 
-    tp.paint(canvas, Offset(size.width / 2 - tp.width / 2, size.height * 0.60));
+    tp.paint(
+      canvas,
+      Offset(size.width / 2 - tp.width / 2, size.height * 0.60),
+    );
   }
 
   void _drawHpBar(Canvas canvas, Size size) {
