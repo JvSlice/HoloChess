@@ -5,7 +5,7 @@ void main() {
   runApp(const HoloApp());
 }
 
-const String gameVersion = 'v0.7.3-panel-slot-fix';
+const String gameVersion = 'v0.7.4-responsive-layout-fix';
 
 class HoloApp extends StatelessWidget {
   const HoloApp({super.key});
@@ -29,11 +29,8 @@ class HoloApp extends StatelessWidget {
 }
 
 enum PlayerSide { cyan, red }
-
 enum GameMode { vsAI, local }
-
 enum Difficulty { easy, medium, hard }
-
 enum UnitType { brute, striker, mystic, tentacle }
 
 extension PlayerSideX on PlayerSide {
@@ -81,9 +78,8 @@ class BoardPos {
   const BoardPos(this.ring, this.sector);
 
   @override
-  bool operator ==(Object other) {
-    return other is BoardPos && other.ring == ring && other.sector == sector;
-  }
+  bool operator ==(Object other) =>
+      other is BoardPos && other.ring == ring && other.sector == sector;
 
   @override
   int get hashCode => Object.hash(ring, sector);
@@ -257,7 +253,6 @@ class GameState {
   factory GameState.initial() {
     final units = <BoardPos, Unit>{};
 
-    // Opposite-side layout restored.
     units[const BoardPos(2, 7)] = Unit(UnitType.brute, PlayerSide.cyan, 12);
     units[const BoardPos(2, 0)] = Unit(UnitType.striker, PlayerSide.cyan, 8);
     units[const BoardPos(2, 1)] = Unit(UnitType.mystic, PlayerSide.cyan, 10);
@@ -493,9 +488,8 @@ class CinematicAI {
   AiChoice? choose(GameState state) {
     final actions = <AiChoice>[];
 
-    final aiUnits = state.units.entries
-        .where((e) => e.value.owner == PlayerSide.red)
-        .toList();
+    final aiUnits =
+        state.units.entries.where((e) => e.value.owner == PlayerSide.red).toList();
 
     for (final entry in aiUnits) {
       final from = entry.key;
@@ -634,9 +628,8 @@ class CinematicAI {
   ) {
     double score = 0;
 
-    final enemies = sim.units.entries
-        .where((e) => e.value.owner == PlayerSide.cyan)
-        .toList();
+    final enemies =
+        sim.units.entries.where((e) => e.value.owner == PlayerSide.cyan).toList();
 
     int nearestEnemyDistance = 99;
     for (final enemy in enemies) {
@@ -1065,7 +1058,7 @@ class _GamePageState extends State<GamePage> {
 
   Widget _buildSelectedPanelSlot(Unit? selectedUnit) {
     return SizedBox(
-      height: 150,
+      height: 120,
       child: selectedUnit == null
           ? const HoloPanel(
               child: Column(
@@ -1228,8 +1221,9 @@ class _GamePageState extends State<GamePage> {
   @override
   Widget build(BuildContext context) {
     final selectedUnit = selected != null ? state.unitAt(selected!) : null;
-    final isWide = MediaQuery.of(context).size.width >= 1000;
-    const double boardSize = 360;
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isWide = screenWidth >= 850;
+    final double boardSize = isWide ? 420 : 320;
 
     return Scaffold(
       body: Stack(
@@ -1240,6 +1234,7 @@ class _GamePageState extends State<GamePage> {
               padding: const EdgeInsets.all(12),
               child: isWide
                   ? Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Expanded(
                           flex: 6,
@@ -1255,7 +1250,7 @@ class _GamePageState extends State<GamePage> {
                                     child: Stack(
                                       children: [
                                         CustomPaint(
-                                          size: const Size(boardSize, boardSize),
+                                          size: Size(boardSize, boardSize),
                                           painter: RoundBoardPainter(),
                                         ),
                                         ...List.generate(GameState.ringCount, (ring) {
@@ -1340,19 +1335,19 @@ class _GamePageState extends State<GamePage> {
                         ),
                       ],
                     )
-                  : Column(
-                      children: [
-                        _buildTopBar(),
-                        const SizedBox(height: 10),
-                        Expanded(
-                          child: Center(
+                  : SingleChildScrollView(
+                      child: Column(
+                        children: [
+                          _buildTopBar(),
+                          const SizedBox(height: 10),
+                          Center(
                             child: SizedBox(
                               width: boardSize,
                               height: boardSize,
                               child: Stack(
                                 children: [
                                   CustomPaint(
-                                    size: const Size(boardSize, boardSize),
+                                    size: Size(boardSize, boardSize),
                                     painter: RoundBoardPainter(),
                                   ),
                                   ...List.generate(GameState.ringCount, (ring) {
@@ -1408,24 +1403,24 @@ class _GamePageState extends State<GamePage> {
                               ),
                             ),
                           ),
-                        ),
-                        const SizedBox(height: 10),
-                        _buildSelectedPanelSlot(selectedUnit),
-                        const SizedBox(height: 10),
-                        HoloPanel(
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              _scoreBlock('Player 1', state.cyanScore, Colors.cyanAccent),
-                              _scoreBlock('Player 2', state.redScore, Colors.redAccent),
-                            ],
+                          const SizedBox(height: 10),
+                          _buildSelectedPanelSlot(selectedUnit),
+                          const SizedBox(height: 10),
+                          HoloPanel(
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                _scoreBlock('Player 1', state.cyanScore, Colors.cyanAccent),
+                                _scoreBlock('Player 2', state.redScore, Colors.redAccent),
+                              ],
+                            ),
                           ),
-                        ),
-                        if (showControls) ...[
-                          const SizedBox(height: 8),
-                          _buildControlsPanel(selectedUnit),
+                          if (showControls) ...[
+                            const SizedBox(height: 8),
+                            _buildControlsPanel(selectedUnit),
+                          ],
                         ],
-                      ],
+                      ),
                     ),
             ),
           ),
