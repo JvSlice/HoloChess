@@ -5,7 +5,7 @@ void main() {
   runApp(const HoloApp());
 }
 
-const String gameVersion = 'v0.8.1-playable-premium-fix';
+const String gameVersion = 'v0.8.2-tap-fix-full';
 
 class HoloApp extends StatelessWidget {
   const HoloApp({super.key});
@@ -279,7 +279,6 @@ class GameState {
     for (final entry in units.entries) {
       newUnits[entry.key] = entry.value.copy();
     }
-
     return GameState(
       units: newUnits,
       turn: turn,
@@ -680,6 +679,8 @@ class GamePage extends StatefulWidget {
 }
 
 class _GamePageState extends State<GamePage> {
+  static const double _tapSnapRadius = 34;
+
   GameState state = GameState.initial();
 
   GameMode mode = GameMode.vsAI;
@@ -823,6 +824,41 @@ class _GamePageState extends State<GamePage> {
       clearSelection();
       state.status = '${state.turn.label} to move';
     });
+  }
+
+  BoardPos? _nearestBoardPos(Offset localPosition, double boardSize) {
+    BoardPos? bestPos;
+    double bestDistance = double.infinity;
+
+    for (int ring = 0; ring < GameState.ringCount; ring++) {
+      for (int sector = 0; sector < GameState.sectorCount; sector++) {
+        final pos = BoardPos(ring, sector);
+        final center = getOffset(pos, boardSize);
+        final distance = (localPosition - center).distance;
+
+        if (distance < bestDistance) {
+          bestDistance = distance;
+          bestPos = pos;
+        }
+      }
+    }
+
+    if (bestDistance <= _tapSnapRadius) {
+      return bestPos;
+    }
+    return null;
+  }
+
+  void _handleBoardTapAtPosition(Offset localPosition, double boardSize) {
+    final pos = _nearestBoardPos(localPosition, boardSize);
+    if (pos == null) return;
+
+    final unit = state.unitAt(pos);
+    if (unit != null && unit.owner == state.turn) {
+      select(pos);
+    } else {
+      tap(pos);
+    }
   }
 
   Future<void> _maybeRunAi() async {
@@ -1203,44 +1239,42 @@ class _GamePageState extends State<GamePage> {
     return SizedBox(
       width: boardSize,
       height: boardSize,
-      child: Stack(
-        children: [
-          CustomPaint(
-            size: Size(boardSize, boardSize),
-            painter: PremiumBoardPainter(
-              selected: selected,
-              moves: moves,
-              targets: targets,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTapDown: (details) {
+          _handleBoardTapAtPosition(details.localPosition, boardSize);
+        },
+        child: Stack(
+          children: [
+            CustomPaint(
+              size: Size(boardSize, boardSize),
+              painter: PremiumBoardPainter(
+                selected: selected,
+                moves: moves,
+                targets: targets,
+              ),
             ),
-          ),
-          ...List.generate(GameState.ringCount, (ring) {
-            return List.generate(GameState.sectorCount, (sector) {
-              final pos = BoardPos(ring, sector);
-              final offset = getOffset(pos, boardSize);
-              final unit = state.unitAt(pos);
+            ...List.generate(GameState.ringCount, (ring) {
+              return List.generate(GameState.sectorCount, (sector) {
+                final pos = BoardPos(ring, sector);
+                final offset = getOffset(pos, boardSize);
+                final unit = state.unitAt(pos);
 
-              return Positioned(
-                left: offset.dx - 34,
-                top: offset.dy - 38,
-                width: 68,
-                height: 76,
-                child: GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onTap: () {
-                    if (unit != null && unit.owner == state.turn) {
-                      select(pos);
-                    } else {
-                      tap(pos);
-                    }
-                  },
-                  child: unit == null
-                      ? const SizedBox.shrink()
-                      : Center(child: PremiumTokenWidget(unit: unit)),
-                ),
-              );
-            });
-          }).expand((e) => e),
-        ],
+                if (unit == null) return const SizedBox.shrink();
+
+                return Positioned(
+                  left: offset.dx - 34,
+                  top: offset.dy - 38,
+                  width: 68,
+                  height: 76,
+                  child: IgnorePointer(
+                    child: Center(child: PremiumTokenWidget(unit: unit)),
+                  ),
+                );
+              });
+            }).expand((e) => e),
+          ],
+        ),
       ),
     );
   }
@@ -1596,8 +1630,7 @@ class PremiumTokenPainter extends CustomPainter {
     canvas.drawCircle(
       emitterCenter,
       7,
-      Paint()
-        ..color = Colors.white.withOpacity(0.92),
+      Paint()..color = Colors.white.withOpacity(0.92),
     );
 
     final beamPaint = Paint()
