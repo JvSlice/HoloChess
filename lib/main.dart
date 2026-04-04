@@ -5,7 +5,7 @@ void main() {
   runApp(const HoloApp());
 }
 
-const String gameVersion = 'v0.7.4-responsive-layout-fix';
+const String gameVersion = 'v0.8.0-premium-holo-board';
 
 class HoloApp extends StatelessWidget {
   const HoloApp({super.key});
@@ -16,7 +16,7 @@ class HoloApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       title: 'Holo Chess',
       theme: ThemeData.dark().copyWith(
-        scaffoldBackgroundColor: const Color(0xFF071019),
+        scaffoldBackgroundColor: const Color(0xFF050A10),
         colorScheme: const ColorScheme.dark(
           primary: Color(0xFF58F3FF),
           secondary: Color(0xFFFF5A93),
@@ -29,17 +29,13 @@ class HoloApp extends StatelessWidget {
 }
 
 enum PlayerSide { cyan, red }
-
 enum GameMode { vsAI, local }
-
 enum Difficulty { easy, medium, hard }
-
 enum UnitType { brute, striker, mystic, tentacle }
 
 extension PlayerSideX on PlayerSide {
-  Color get color => this == PlayerSide.cyan
-      ? const Color(0xFF58F3FF)
-      : const Color(0xFFFF5A93);
+  Color get color =>
+      this == PlayerSide.cyan ? const Color(0xFF58F3FF) : const Color(0xFFFF5A93);
 
   String get label => this == PlayerSide.cyan ? 'Player 1' : 'Player 2';
 
@@ -98,10 +94,20 @@ class Unit {
   int hp;
   bool abilityUsedThisTurn;
 
-  Unit(this.type, this.owner, this.hp, {this.abilityUsedThisTurn = false});
+  Unit(
+    this.type,
+    this.owner,
+    this.hp, {
+    this.abilityUsedThisTurn = false,
+  });
 
   Unit copy() {
-    return Unit(type, owner, hp, abilityUsedThisTurn: abilityUsedThisTurn);
+    return Unit(
+      type,
+      owner,
+      hp,
+      abilityUsedThisTurn: abilityUsedThisTurn,
+    );
   }
 
   int get maxHp {
@@ -247,6 +253,7 @@ class GameState {
   factory GameState.initial() {
     final units = <BoardPos, Unit>{};
 
+    // Opposite-side layout.
     units[const BoardPos(2, 7)] = Unit(UnitType.brute, PlayerSide.cyan, 12);
     units[const BoardPos(2, 0)] = Unit(UnitType.striker, PlayerSide.cyan, 8);
     units[const BoardPos(2, 1)] = Unit(UnitType.mystic, PlayerSide.cyan, 10);
@@ -349,8 +356,7 @@ class Rules {
       BoardPos(pos.ring, wrapSector(pos.sector + 1)),
       BoardPos(pos.ring, wrapSector(pos.sector - 1)),
       if (pos.ring > 0) BoardPos(pos.ring - 1, pos.sector),
-      if (pos.ring < GameState.ringCount - 1)
-        BoardPos(pos.ring + 1, pos.sector),
+      if (pos.ring < GameState.ringCount - 1) BoardPos(pos.ring + 1, pos.sector),
     ];
   }
 
@@ -396,11 +402,7 @@ class Rules {
     return result.toList();
   }
 
-  static List<BoardPos> getAbilityMoves(
-    GameState state,
-    Unit unit,
-    BoardPos start,
-  ) {
+  static List<BoardPos> getAbilityMoves(GameState state, Unit unit, BoardPos start) {
     final movement = unit.type == UnitType.striker ? unit.move + 1 : unit.move;
     final visited = <BoardPos, int>{start: 0};
     final queue = <BoardPos>[start];
@@ -431,12 +433,7 @@ class Rules {
         .toList();
   }
 
-  static void performAbility(
-    GameState state,
-    Unit unit,
-    BoardPos from,
-    BoardPos to,
-  ) {
+  static void performAbility(GameState state, Unit unit, BoardPos from, BoardPos to) {
     state.move(from, to);
     unit.abilityUsedThisTurn = true;
 
@@ -461,9 +458,7 @@ class Rules {
             .toList();
 
         if (enemies.isNotEmpty) {
-          enemies.sort(
-            (a, b) => distance(to, a.key).compareTo(distance(to, b.key)),
-          );
+          enemies.sort((a, b) => distance(to, a.key).compareTo(distance(to, b.key)));
           state.damage(enemies.first.key, 1, source: unit.owner);
         }
         break;
@@ -494,9 +489,8 @@ class CinematicAI {
   AiChoice? choose(GameState state) {
     final actions = <AiChoice>[];
 
-    final aiUnits = state.units.entries
-        .where((e) => e.value.owner == PlayerSide.red)
-        .toList();
+    final aiUnits =
+        state.units.entries.where((e) => e.value.owner == PlayerSide.red).toList();
 
     for (final entry in aiUnits) {
       final from = entry.key;
@@ -518,22 +512,12 @@ class CinematicAI {
 
         if (afterTargets.isEmpty) {
           actions.add(
-            AiChoice(
-              from: from,
-              moveTo: moveTo,
-              target: null,
-              useAbility: false,
-            ),
+            AiChoice(from: from, moveTo: moveTo, target: null, useAbility: false),
           );
         } else {
           for (final target in afterTargets) {
             actions.add(
-              AiChoice(
-                from: from,
-                moveTo: moveTo,
-                target: target,
-                useAbility: false,
-              ),
+              AiChoice(from: from, moveTo: moveTo, target: target, useAbility: false),
             );
           }
         }
@@ -543,12 +527,7 @@ class CinematicAI {
         final abilityMoves = Rules.getAbilityMoves(state, unit, from);
         for (final moveTo in abilityMoves) {
           actions.add(
-            AiChoice(
-              from: from,
-              moveTo: moveTo,
-              target: null,
-              useAbility: true,
-            ),
+            AiChoice(from: from, moveTo: moveTo, target: null, useAbility: true),
           );
         }
       }
@@ -650,9 +629,8 @@ class CinematicAI {
   ) {
     double score = 0;
 
-    final enemies = sim.units.entries
-        .where((e) => e.value.owner == PlayerSide.cyan)
-        .toList();
+    final enemies =
+        sim.units.entries.where((e) => e.value.owner == PlayerSide.cyan).toList();
 
     int nearestEnemyDistance = 99;
     for (final enemy in enemies) {
@@ -845,9 +823,7 @@ class _GamePageState extends State<GamePage> {
       return;
     }
 
-    if (waitingForPostMoveAttack &&
-        pendingMove != null &&
-        targets.contains(pos)) {
+    if (waitingForPostMoveAttack && pendingMove != null && targets.contains(pos)) {
       setState(() {
         state.move(selected!, pendingMove!);
         state.damage(pos, unit.atk, source: unit.owner);
@@ -942,10 +918,9 @@ class _GamePageState extends State<GamePage> {
 
   Offset getOffset(BoardPos pos, double boardSize) {
     final center = Offset(boardSize / 2, boardSize / 2);
-    final radiusStep = boardSize * 0.38 / GameState.ringCount;
+    final radiusStep = boardSize * 0.365 / GameState.ringCount;
     final radius = (pos.ring + 1) * radiusStep;
-    final angle =
-        (2 * math.pi / GameState.sectorCount) * pos.sector - math.pi / 2;
+    final angle = (2 * math.pi / GameState.sectorCount) * pos.sector - math.pi / 2;
 
     return Offset(
       center.dx + radius * math.cos(angle),
@@ -964,7 +939,9 @@ class _GamePageState extends State<GamePage> {
       onSelected: (_) => onTap(),
       selectedColor: const Color(0xFF173447),
       backgroundColor: const Color(0xFF0B1623),
-      side: BorderSide(color: selected ? Colors.cyanAccent : Colors.white24),
+      side: BorderSide(
+        color: selected ? Colors.cyanAccent : Colors.white24,
+      ),
       labelStyle: TextStyle(
         color: selected ? Colors.cyanAccent : Colors.white70,
         fontWeight: FontWeight.w700,
@@ -1032,7 +1009,10 @@ class _GamePageState extends State<GamePage> {
             onPressed: _showHowToPlay,
           ),
           const SizedBox(width: 6),
-          HoloIconMiniButton(icon: Icons.refresh, onPressed: restartGame),
+          HoloIconMiniButton(
+            icon: Icons.refresh,
+            onPressed: restartGame,
+          ),
           const SizedBox(width: 6),
           HoloIconMiniButton(
             icon: showControls ? Icons.expand_less : Icons.tune,
@@ -1041,36 +1021,6 @@ class _GamePageState extends State<GamePage> {
                 showControls = !showControls;
               });
             },
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSelectedUnitPanel(Unit selectedUnit) {
-    return HoloPanel(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            selectedUnit.name,
-            style: TextStyle(
-              fontSize: 18,
-              color: selectedUnit.owner.color,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          const SizedBox(height: 6),
-          Text(selectedUnit.description),
-          const SizedBox(height: 6),
-          Text(
-            'HP: ${selectedUnit.hp}/${selectedUnit.maxHp}   ATK: ${selectedUnit.atk}   RNG: ${selectedUnit.range}   MOV: ${selectedUnit.move}',
-            style: const TextStyle(color: Colors.white70),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            'Ability: ${selectedUnit.abilityName} — ${selectedUnit.abilityDescription}',
-            style: const TextStyle(color: Colors.white70),
           ),
         ],
       ),
@@ -1103,7 +1053,7 @@ class _GamePageState extends State<GamePage> {
               ),
             )
           : HoloPanel(
-              key: ValueKey('filled_selected_panel'),
+              key: const ValueKey('filled_selected_panel'),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -1271,6 +1221,47 @@ class _GamePageState extends State<GamePage> {
     );
   }
 
+  Widget _buildBoard(double boardSize) {
+    return SizedBox(
+      width: boardSize,
+      height: boardSize,
+      child: Stack(
+        children: [
+          CustomPaint(
+            size: Size(boardSize, boardSize),
+            painter: PremiumBoardPainter(
+              selected: selected,
+              moves: moves,
+              targets: targets,
+              boardSize: boardSize,
+            ),
+          ),
+          ...List.generate(GameState.ringCount, (ring) {
+            return List.generate(GameState.sectorCount, (sector) {
+              final pos = BoardPos(ring, sector);
+              final offset = getOffset(pos, boardSize);
+              final unit = state.unitAt(pos);
+
+              return Positioned(
+                left: offset.dx - 30,
+                top: offset.dy - 34,
+                width: 60,
+                height: 68,
+                child: GestureDetector(
+                  onTap: () =>
+                      unit != null && unit.owner == state.turn ? select(pos) : tap(pos),
+                  child: unit == null
+                      ? const SizedBox.shrink()
+                      : PremiumTokenWidget(unit: unit),
+                ),
+              );
+            });
+          }).expand((e) => e),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final selectedUnit = selected != null ? state.unitAt(selected!) : null;
@@ -1297,98 +1288,7 @@ class _GamePageState extends State<GamePage> {
                               const SizedBox(height: 10),
                               Expanded(
                                 child: Center(
-                                  child: SizedBox(
-                                    width: boardSize,
-                                    height: boardSize,
-                                    child: Stack(
-                                      children: [
-                                        CustomPaint(
-                                          size: Size(boardSize, boardSize),
-                                          painter: RoundBoardPainter(),
-                                        ),
-                                        ...List.generate(GameState.ringCount, (
-                                          ring,
-                                        ) {
-                                          return List.generate(
-                                            GameState.sectorCount,
-                                            (sector) {
-                                              final pos = BoardPos(
-                                                ring,
-                                                sector,
-                                              );
-                                              final offset = getOffset(
-                                                pos,
-                                                boardSize,
-                                              );
-                                              final unit = state.unitAt(pos);
-
-                                              final isSelected =
-                                                  selected == pos;
-                                              final isMove = moves.contains(
-                                                pos,
-                                              );
-                                              final isTarget = targets.contains(
-                                                pos,
-                                              );
-
-                                              return Positioned(
-                                                left: offset.dx - 30,
-                                                top: offset.dy - 30,
-                                                width: 60,
-                                                height: 60,
-                                                child: GestureDetector(
-                                                  onTap: () =>
-                                                      unit != null &&
-                                                          unit.owner ==
-                                                              state.turn
-                                                      ? select(pos)
-                                                      : tap(pos),
-                                                  child: Container(
-                                                    decoration: BoxDecoration(
-                                                      shape: BoxShape.circle,
-                                                      color: isSelected
-                                                          ? const Color(
-                                                              0x2247F1FF,
-                                                            )
-                                                          : isMove
-                                                          ? const Color(
-                                                              0x22FFD56A,
-                                                            )
-                                                          : isTarget
-                                                          ? const Color(
-                                                              0x33FF5A93,
-                                                            )
-                                                          : Colors.transparent,
-                                                      border: Border.all(
-                                                        color: isSelected
-                                                            ? Colors.cyanAccent
-                                                            : isMove
-                                                            ? const Color(
-                                                                0xFFFFD56A,
-                                                              )
-                                                            : isTarget
-                                                            ? Colors.redAccent
-                                                            : Colors
-                                                                  .transparent,
-                                                        width: 2,
-                                                      ),
-                                                    ),
-                                                    child: unit == null
-                                                        ? const SizedBox.shrink()
-                                                        : Center(
-                                                            child: BeastToken(
-                                                              unit: unit,
-                                                            ),
-                                                          ),
-                                                  ),
-                                                ),
-                                              );
-                                            },
-                                          );
-                                        }).expand((e) => e),
-                                      ],
-                                    ),
-                                  ),
+                                  child: _buildBoard(boardSize),
                                 ),
                               ),
                               const SizedBox(height: 12),
@@ -1406,19 +1306,10 @@ class _GamePageState extends State<GamePage> {
                                 const SizedBox(height: 8),
                                 HoloPanel(
                                   child: Row(
-                                    mainAxisAlignment:
-                                        MainAxisAlignment.spaceBetween,
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                     children: [
-                                      _scoreBlock(
-                                        'Player 1',
-                                        state.cyanScore,
-                                        Colors.cyanAccent,
-                                      ),
-                                      _scoreBlock(
-                                        'Player 2',
-                                        state.redScore,
-                                        Colors.redAccent,
-                                      ),
+                                      _scoreBlock('Player 1', state.cyanScore, Colors.cyanAccent),
+                                      _scoreBlock('Player 2', state.redScore, Colors.redAccent),
                                     ],
                                   ),
                                 ),
@@ -1433,80 +1324,7 @@ class _GamePageState extends State<GamePage> {
                         children: [
                           _buildTopBar(),
                           const SizedBox(height: 10),
-                          Center(
-                            child: SizedBox(
-                              width: boardSize,
-                              height: boardSize,
-                              child: Stack(
-                                children: [
-                                  CustomPaint(
-                                    size: Size(boardSize, boardSize),
-                                    painter: RoundBoardPainter(),
-                                  ),
-                                  ...List.generate(GameState.ringCount, (ring) {
-                                    return List.generate(
-                                      GameState.sectorCount,
-                                      (sector) {
-                                        final pos = BoardPos(ring, sector);
-                                        final offset = getOffset(
-                                          pos,
-                                          boardSize,
-                                        );
-                                        final unit = state.unitAt(pos);
-
-                                        final isSelected = selected == pos;
-                                        final isMove = moves.contains(pos);
-                                        final isTarget = targets.contains(pos);
-
-                                        return Positioned(
-                                          left: offset.dx - 30,
-                                          top: offset.dy - 30,
-                                          width: 60,
-                                          height: 60,
-                                          child: GestureDetector(
-                                            onTap: () =>
-                                                unit != null &&
-                                                    unit.owner == state.turn
-                                                ? select(pos)
-                                                : tap(pos),
-                                            child: Container(
-                                              decoration: BoxDecoration(
-                                                shape: BoxShape.circle,
-                                                color: isSelected
-                                                    ? const Color(0x2247F1FF)
-                                                    : isMove
-                                                    ? const Color(0x22FFD56A)
-                                                    : isTarget
-                                                    ? const Color(0x33FF5A93)
-                                                    : Colors.transparent,
-                                                border: Border.all(
-                                                  color: isSelected
-                                                      ? Colors.cyanAccent
-                                                      : isMove
-                                                      ? const Color(0xFFFFD56A)
-                                                      : isTarget
-                                                      ? Colors.redAccent
-                                                      : Colors.transparent,
-                                                  width: 2,
-                                                ),
-                                              ),
-                                              child: unit == null
-                                                  ? const SizedBox.shrink()
-                                                  : Center(
-                                                      child: BeastToken(
-                                                        unit: unit,
-                                                      ),
-                                                    ),
-                                            ),
-                                          ),
-                                        );
-                                      },
-                                    );
-                                  }).expand((e) => e),
-                                ],
-                              ),
-                            ),
-                          ),
+                          Center(child: _buildBoard(boardSize)),
                           const SizedBox(height: 10),
                           _buildSelectedPanelSlot(selectedUnit),
                           const SizedBox(height: 10),
@@ -1514,16 +1332,8 @@ class _GamePageState extends State<GamePage> {
                             child: Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
-                                _scoreBlock(
-                                  'Player 1',
-                                  state.cyanScore,
-                                  Colors.cyanAccent,
-                                ),
-                                _scoreBlock(
-                                  'Player 2',
-                                  state.redScore,
-                                  Colors.redAccent,
-                                ),
+                                _scoreBlock('Player 1', state.cyanScore, Colors.cyanAccent),
+                                _scoreBlock('Player 2', state.redScore, Colors.redAccent),
                               ],
                             ),
                           ),
@@ -1576,290 +1386,384 @@ class _GamePageState extends State<GamePage> {
   }
 }
 
-class RoundBoardPainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
+class PremiumBoardPainter extends CustomPainter {
+  final BoardPos? selected;
+  final List<BoardPos> moves;
+  final List<BoardPos> targets;
+  final double boardSize;
+
+  PremiumBoardPainter({
+    required this.selected,
+    required this.moves,
+    required this.targets,
+    required this.boardSize,
+  });
+
+  Offset _cellCenter(BoardPos pos, Size size) {
     final center = size.center(Offset.zero);
-    final maxRadius = size.width * 0.42;
+    final radiusStep = size.width * 0.365 / GameState.ringCount;
+    final radius = (pos.ring + 1) * radiusStep;
+    final angle = (2 * math.pi / GameState.sectorCount) * pos.sector - math.pi / 2;
 
-    final fill = Paint()
-      ..shader = const RadialGradient(
-        colors: [Color(0x2200E7FF), Color(0x1100E7FF), Color(0x0300E7FF)],
-      ).createShader(Rect.fromCircle(center: center, radius: maxRadius));
+    return Offset(
+      center.dx + radius * math.cos(angle),
+      center.dy + radius * math.sin(angle),
+    );
+  }
 
-    final outerGlow = Paint()
-      ..color = const Color(0x3358F3FF)
+  Paint _glowStroke(Color color, double width, {double blur = 10}) {
+    return Paint()
+      ..color = color.withOpacity(0.75)
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 10
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 14);
-
-    final line = Paint()
-      ..color = const Color(0xAA58F3FF)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.4;
-
-    canvas.drawCircle(center, maxRadius, fill);
-    canvas.drawCircle(center, maxRadius, outerGlow);
-
-    final ringStep = maxRadius / GameState.ringCount;
-    for (int r = 1; r <= GameState.ringCount; r++) {
-      canvas.drawCircle(center, ringStep * r, line);
-    }
-
-    final sectorStep = 2 * math.pi / GameState.sectorCount;
-    for (int s = 0; s < GameState.sectorCount; s++) {
-      final angle = -math.pi / 2 + s * sectorStep;
-      final end = Offset(
-        center.dx + maxRadius * math.cos(angle),
-        center.dy + maxRadius * math.sin(angle),
-      );
-      canvas.drawLine(center, end, line);
-    }
-
-    final centerGlow = Paint()
-      ..color = const Color(0x6658F3FF)
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 18);
-
-    canvas.drawCircle(center, size.width * 0.03, centerGlow);
+      ..strokeWidth = width
+      ..maskFilter = MaskFilter.blur(BlurStyle.normal, blur);
   }
 
   @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+  void paint(Canvas canvas, Size size) {
+    final center = size.center(Offset.zero);
+    final radius = size.width * 0.43;
+
+    final bgFill = Paint()
+      ..shader = RadialGradient(
+        colors: [
+          const Color(0xFF092230).withOpacity(0.9),
+          const Color(0xFF061019).withOpacity(0.75),
+          Colors.transparent,
+        ],
+      ).createShader(Rect.fromCircle(center: center, radius: radius * 1.25));
+
+    canvas.drawCircle(center, radius * 1.08, bgFill);
+
+    final fieldGlow = Paint()
+      ..color = const Color(0xFF58F3FF).withOpacity(0.08)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 45);
+    canvas.drawCircle(center, radius * 0.95, fieldGlow);
+
+    // Outer containment ring
+    canvas.drawCircle(center, radius, _glowStroke(const Color(0xFF84F9FF), 3.2, blur: 14));
+    canvas.drawCircle(
+      center,
+      radius,
+      Paint()
+        ..color = const Color(0xFF9AFBFF).withOpacity(0.65)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.6,
+    );
+
+    // Technical ghost ring
+    canvas.drawCircle(
+      center,
+      radius * 0.91,
+      Paint()
+        ..color = const Color(0xFF58F3FF).withOpacity(0.18)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1,
+    );
+
+    // Major rings
+    final middleR = radius * 0.67;
+    final innerR = radius * 0.34;
+
+    canvas.drawCircle(center, middleR, _glowStroke(const Color(0xFF58F3FF), 2.2, blur: 10));
+    canvas.drawCircle(
+      center,
+      middleR,
+      Paint()
+        ..color = const Color(0xFF7EEFFF).withOpacity(0.65)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.2,
+    );
+
+    canvas.drawCircle(center, innerR, _glowStroke(const Color(0xFF58F3FF), 1.8, blur: 8));
+    canvas.drawCircle(
+      center,
+      innerR,
+      Paint()
+        ..color = const Color(0xFF7EEFFF).withOpacity(0.55)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1,
+    );
+
+    // Center core
+    final coreGlow = Paint()
+      ..color = const Color(0xFF58F3FF).withOpacity(0.16)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 22);
+    canvas.drawCircle(center, radius * 0.11, coreGlow);
+    canvas.drawCircle(
+      center,
+      radius * 0.075,
+      Paint()
+        ..color = const Color(0xFF58F3FF).withOpacity(0.38)
+        ..style = PaintingStyle.fill,
+    );
+
+    // Radials
+    final radialPaint = Paint()
+      ..color = const Color(0xFF58F3FF).withOpacity(0.45)
+      ..strokeWidth = 1.4;
+
+    for (int i = 0; i < GameState.sectorCount; i++) {
+      final angle = -math.pi / 2 + (i / GameState.sectorCount) * 2 * math.pi;
+      final end = Offset(
+        center.dx + radius * math.cos(angle),
+        center.dy + radius * math.sin(angle),
+      );
+      canvas.drawLine(center, end, radialPaint);
+    }
+
+    // Ghost tick marks around the board
+    final tickPaint = Paint()
+      ..color = const Color(0xFFB2FEFF).withOpacity(0.18)
+      ..strokeWidth = 1;
+
+    for (int i = 0; i < 48; i++) {
+      final angle = -math.pi / 2 + (i / 48) * 2 * math.pi;
+      final r1 = radius * 0.93;
+      final r2 = radius * 0.97;
+      final p1 = Offset(center.dx + r1 * math.cos(angle), center.dy + r1 * math.sin(angle));
+      final p2 = Offset(center.dx + r2 * math.cos(angle), center.dy + r2 * math.sin(angle));
+      canvas.drawLine(p1, p2, tickPaint);
+    }
+
+    // Subtle position pads
+    for (int ring = 0; ring < GameState.ringCount; ring++) {
+      for (int sector = 0; sector < GameState.sectorCount; sector++) {
+        final pos = BoardPos(ring, sector);
+        final p = _cellCenter(pos, size);
+
+        final padGlow = Paint()
+          ..color = const Color(0xFF58F3FF).withOpacity(0.06)
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8);
+
+        canvas.drawCircle(p, 19, padGlow);
+
+        final padPaint = Paint()
+          ..color = const Color(0xFF9EF9FF).withOpacity(0.18)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.1;
+
+        canvas.drawCircle(p, 13, padPaint);
+
+        if (selected == pos) {
+          final selectGlow = Paint()
+            ..color = const Color(0xFF58F3FF).withOpacity(0.34)
+            ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 10);
+          canvas.drawCircle(p, 31, selectGlow);
+          canvas.drawCircle(
+            p,
+            29,
+            Paint()
+              ..color = const Color(0xFF58F3FF)
+              ..style = PaintingStyle.stroke
+              ..strokeWidth = 2.4,
+          );
+        } else if (moves.contains(pos)) {
+          final moveGlow = Paint()
+            ..color = const Color(0xFFFFD56A).withOpacity(0.16)
+            ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8);
+          canvas.drawCircle(p, 27, moveGlow);
+          canvas.drawCircle(
+            p,
+            25,
+            Paint()
+              ..color = const Color(0xFFFFD56A)
+              ..style = PaintingStyle.stroke
+              ..strokeWidth = 2.0,
+          );
+        } else if (targets.contains(pos)) {
+          final targetGlow = Paint()
+            ..color = const Color(0xFFFF5A93).withOpacity(0.20)
+            ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 9);
+          canvas.drawCircle(p, 27, targetGlow);
+          canvas.drawCircle(
+            p,
+            25,
+            Paint()
+              ..color = const Color(0xFFFF5A93)
+              ..style = PaintingStyle.stroke
+              ..strokeWidth = 2.0,
+          );
+        }
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant PremiumBoardPainter oldDelegate) {
+    return oldDelegate.selected != selected ||
+        oldDelegate.boardSize != boardSize ||
+        oldDelegate.moves.length != moves.length ||
+        oldDelegate.targets.length != targets.length;
+  }
 }
 
-class BeastToken extends StatelessWidget {
+class PremiumTokenWidget extends StatelessWidget {
   final Unit unit;
 
-  const BeastToken({super.key, required this.unit});
+  const PremiumTokenWidget({super.key, required this.unit});
 
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      width: 56,
-      height: 56,
-      child: CustomPaint(painter: BeastTokenPainter(unit: unit)),
+      width: 60,
+      height: 68,
+      child: CustomPaint(
+        painter: PremiumTokenPainter(unit: unit),
+      ),
     );
   }
 }
 
-class BeastTokenPainter extends CustomPainter {
+class PremiumTokenPainter extends CustomPainter {
   final Unit unit;
 
-  BeastTokenPainter({required this.unit});
+  PremiumTokenPainter({required this.unit});
 
   @override
   void paint(Canvas canvas, Size size) {
     final color = unit.owner.color;
-    final center = size.center(Offset.zero);
+    final emitterCenter = Offset(size.width / 2, size.height * 0.73);
+    final symbolCenter = Offset(size.width / 2, size.height * 0.34);
 
-    final glow = Paint()
-      ..color = color.withOpacity(0.18)
+    final baseGlow = Paint()
+      ..color = color.withOpacity(0.22)
       ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 12);
+    canvas.drawCircle(emitterCenter, 22, baseGlow);
+
+    final emitterCoreGlow = Paint()
+      ..color = color.withOpacity(0.65)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6);
+    canvas.drawCircle(emitterCenter, 12, emitterCoreGlow);
+
+    canvas.drawCircle(
+      emitterCenter,
+      15,
+      Paint()
+        ..color = color.withOpacity(0.95)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2.2,
+    );
+
+    canvas.drawCircle(
+      emitterCenter,
+      7,
+      Paint()
+        ..color = Colors.white.withOpacity(0.85)
+        ..style = PaintingStyle.fill,
+    );
+
+    final beamPaint = Paint()
+      ..shader = LinearGradient(
+        begin: Alignment.bottomCenter,
+        end: Alignment.topCenter,
+        colors: [
+          color.withOpacity(0.03),
+          color.withOpacity(0.28),
+          color.withOpacity(0.08),
+        ],
+      ).createShader(
+        Rect.fromLTWH(
+          emitterCenter.dx - 6,
+          symbolCenter.dy - 6,
+          12,
+          emitterCenter.dy - symbolCenter.dy + 12,
+        ),
+      );
+
+    final beamPath = Path()
+      ..moveTo(emitterCenter.dx - 6, emitterCenter.dy - 2)
+      ..lineTo(emitterCenter.dx + 6, emitterCenter.dy - 2)
+      ..lineTo(symbolCenter.dx + 3, symbolCenter.dy + 10)
+      ..lineTo(symbolCenter.dx - 3, symbolCenter.dy + 10)
+      ..close();
+
+    canvas.drawPath(beamPath, beamPaint);
+
+    final creatureGlow = Paint()
+      ..color = color.withOpacity(0.18)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 10);
+    canvas.drawCircle(symbolCenter, 18, creatureGlow);
 
     final line = Paint()
       ..color = color.withOpacity(0.98)
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 2.1;
-
-    final fill = Paint()
-      ..shader =
-          RadialGradient(
-            colors: [
-              color.withOpacity(0.30),
-              color.withOpacity(0.10),
-              color.withOpacity(0.02),
-            ],
-          ).createShader(
-            Rect.fromCircle(center: center, radius: size.width * 0.30),
-          );
-
-    canvas.drawCircle(center, size.width * 0.33, glow);
-    canvas.drawCircle(center, size.width * 0.29, fill);
-
-    _drawBase(canvas, size, line);
+      ..strokeWidth = 2.0;
 
     switch (unit.type) {
       case UnitType.brute:
-        _drawBrute(canvas, size, line);
+        _drawBrute(canvas, symbolCenter, line);
         break;
       case UnitType.striker:
-        _drawStriker(canvas, size, line);
+        _drawStriker(canvas, symbolCenter, line);
         break;
       case UnitType.mystic:
-        _drawMystic(canvas, size, line);
+        _drawMystic(canvas, symbolCenter, line);
         break;
       case UnitType.tentacle:
-        _drawTentacle(canvas, size, line);
+        _drawTentacle(canvas, symbolCenter, line);
         break;
     }
 
-    _drawEyes(canvas, size, color);
-    _drawLetter(canvas, size);
+    _drawLetter(canvas, size, symbolCenter);
     _drawHpBar(canvas, size);
   }
 
-  void _drawBase(Canvas canvas, Size size, Paint line) {
-    final c = size.center(Offset.zero);
+  void _drawBrute(Canvas canvas, Offset c, Paint line) {
+    final path = Path()
+      ..moveTo(c.dx - 11, c.dy + 7)
+      ..quadraticBezierTo(c.dx - 14, c.dy - 1, c.dx - 6, c.dy - 12)
+      ..lineTo(c.dx, c.dy - 16)
+      ..lineTo(c.dx + 6, c.dy - 12)
+      ..quadraticBezierTo(c.dx + 14, c.dy - 1, c.dx + 11, c.dy + 7);
 
-    switch (unit.type) {
-      case UnitType.brute:
-        canvas.drawRRect(
-          RRect.fromRectAndRadius(
-            Rect.fromCenter(
-              center: c.translate(0, size.height * 0.18),
-              width: size.width * 0.34,
-              height: size.height * 0.10,
-            ),
-            const Radius.circular(6),
-          ),
-          line,
-        );
-        break;
-      case UnitType.striker:
-        final diamond = Path()
-          ..moveTo(c.dx, c.dy + size.height * 0.10)
-          ..lineTo(c.dx + size.width * 0.16, c.dy + size.height * 0.18)
-          ..lineTo(c.dx, c.dy + size.height * 0.26)
-          ..lineTo(c.dx - size.width * 0.16, c.dy + size.height * 0.18)
-          ..close();
-        canvas.drawPath(diamond, line);
-        break;
-      case UnitType.mystic:
-        canvas.drawOval(
-          Rect.fromCenter(
-            center: c.translate(0, size.height * 0.18),
-            width: size.width * 0.32,
-            height: size.height * 0.12,
-          ),
-          line,
-        );
-        break;
-      case UnitType.tentacle:
-        canvas.drawArc(
-          Rect.fromCenter(
-            center: c.translate(0, size.height * 0.18),
-            width: size.width * 0.34,
-            height: size.height * 0.18,
-          ),
-          0.2,
-          math.pi - 0.4,
-          false,
-          line,
-        );
-        break;
-    }
+    canvas.drawPath(path, line);
+    canvas.drawLine(Offset(c.dx - 5, c.dy - 11), Offset(c.dx - 14, c.dy - 18), line);
+    canvas.drawLine(Offset(c.dx + 5, c.dy - 11), Offset(c.dx + 14, c.dy - 18), line);
+    canvas.drawLine(Offset(c.dx - 6, c.dy - 1), Offset(c.dx + 6, c.dy - 1), line);
+
+    final eyeGlow = Paint()
+      ..color = Colors.white.withOpacity(0.95)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2);
+    canvas.drawCircle(Offset(c.dx - 4, c.dy - 6), 1.5, eyeGlow);
+    canvas.drawCircle(Offset(c.dx + 4, c.dy - 6), 1.5, eyeGlow);
   }
 
-  void _drawBrute(Canvas canvas, Size size, Paint line) {
-    final c = size.center(Offset.zero);
-
-    final head = Path()
-      ..moveTo(c.dx - size.width * 0.18, c.dy + size.height * 0.06)
-      ..quadraticBezierTo(
-        c.dx - size.width * 0.22,
-        c.dy - size.height * 0.02,
-        c.dx - size.width * 0.10,
-        c.dy - size.height * 0.18,
-      )
-      ..lineTo(c.dx, c.dy - size.height * 0.24)
-      ..lineTo(c.dx + size.width * 0.10, c.dy - size.height * 0.18)
-      ..quadraticBezierTo(
-        c.dx + size.width * 0.22,
-        c.dy - size.height * 0.02,
-        c.dx + size.width * 0.18,
-        c.dy + size.height * 0.06,
-      );
-
-    canvas.drawPath(head, line);
-
-    canvas.drawLine(
-      Offset(c.dx - size.width * 0.08, c.dy - size.height * 0.16),
-      Offset(c.dx - size.width * 0.22, c.dy - size.height * 0.26),
-      line,
-    );
-    canvas.drawLine(
-      Offset(c.dx + size.width * 0.08, c.dy - size.height * 0.16),
-      Offset(c.dx + size.width * 0.22, c.dy - size.height * 0.26),
-      line,
-    );
-
-    canvas.drawLine(
-      Offset(c.dx - size.width * 0.10, c.dy - size.height * 0.02),
-      Offset(c.dx + size.width * 0.10, c.dy - size.height * 0.02),
-      line,
-    );
-  }
-
-  void _drawStriker(Canvas canvas, Size size, Paint line) {
-    final c = size.center(Offset.zero);
-
+  void _drawStriker(Canvas canvas, Offset c, Paint line) {
     final body = Path()
-      ..moveTo(c.dx, c.dy - size.height * 0.26)
-      ..lineTo(c.dx + size.width * 0.10, c.dy - size.height * 0.04)
-      ..lineTo(c.dx, c.dy + size.height * 0.10)
-      ..lineTo(c.dx - size.width * 0.10, c.dy - size.height * 0.04)
+      ..moveTo(c.dx, c.dy - 17)
+      ..lineTo(c.dx + 7, c.dy - 3)
+      ..lineTo(c.dx, c.dy + 12)
+      ..lineTo(c.dx - 7, c.dy - 3)
       ..close();
-
     canvas.drawPath(body, line);
 
-    canvas.drawLine(
-      Offset(c.dx - size.width * 0.04, c.dy - size.height * 0.10),
-      Offset(c.dx - size.width * 0.22, c.dy - size.height * 0.20),
-      line,
-    );
-    canvas.drawLine(
-      Offset(c.dx + size.width * 0.04, c.dy - size.height * 0.10),
-      Offset(c.dx + size.width * 0.22, c.dy - size.height * 0.20),
-      line,
-    );
+    canvas.drawLine(Offset(c.dx - 3, c.dy - 8), Offset(c.dx - 14, c.dy - 18), line);
+    canvas.drawLine(Offset(c.dx + 3, c.dy - 8), Offset(c.dx + 14, c.dy - 18), line);
+    canvas.drawLine(Offset(c.dx - 2, c.dy + 1), Offset(c.dx - 12, c.dy + 10), line);
+    canvas.drawLine(Offset(c.dx + 2, c.dy + 1), Offset(c.dx + 12, c.dy + 10), line);
 
-    canvas.drawLine(
-      Offset(c.dx - size.width * 0.03, c.dy + size.height * 0.02),
-      Offset(c.dx - size.width * 0.18, c.dy + size.height * 0.14),
-      line,
-    );
-    canvas.drawLine(
-      Offset(c.dx + size.width * 0.03, c.dy + size.height * 0.02),
-      Offset(c.dx + size.width * 0.18, c.dy + size.height * 0.14),
-      line,
-    );
+    final eyeGlow = Paint()
+      ..color = Colors.white.withOpacity(0.95)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2);
+    canvas.drawCircle(Offset(c.dx, c.dy - 9), 1.5, eyeGlow);
   }
 
-  void _drawMystic(Canvas canvas, Size size, Paint line) {
-    final c = size.center(Offset.zero);
+  void _drawMystic(Canvas canvas, Offset c, Paint line) {
+    canvas.drawCircle(Offset(c.dx, c.dy - 10), 5, line);
+    canvas.drawCircle(Offset(c.dx - 8, c.dy - 1), 4.5, line);
+    canvas.drawCircle(Offset(c.dx + 8, c.dy - 1), 4.5, line);
+    canvas.drawLine(Offset(c.dx, c.dy + 0), Offset(c.dx, c.dy + 11), line);
 
-    canvas.drawCircle(
-      c.translate(0, -size.height * 0.12),
-      size.width * 0.08,
-      line,
-    );
-    canvas.drawCircle(
-      c.translate(-size.width * 0.11, 0),
-      size.width * 0.07,
-      line,
-    );
-    canvas.drawCircle(
-      c.translate(size.width * 0.11, 0),
-      size.width * 0.07,
-      line,
-    );
-
-    canvas.drawLine(
-      Offset(c.dx, c.dy - size.height * 0.02),
-      Offset(c.dx, c.dy + size.height * 0.14),
-      line,
-    );
+    final eyeGlow = Paint()
+      ..color = Colors.white.withOpacity(0.95)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2);
+    canvas.drawCircle(Offset(c.dx, c.dy - 10), 1.6, eyeGlow);
   }
 
-  void _drawTentacle(Canvas canvas, Size size, Paint line) {
-    final c = size.center(Offset.zero);
-
+  void _drawTentacle(Canvas canvas, Offset c, Paint line) {
     canvas.drawArc(
-      Rect.fromCenter(
-        center: c.translate(0, -size.height * 0.06),
-        width: size.width * 0.26,
-        height: size.height * 0.20,
-      ),
+      Rect.fromCenter(center: Offset(c.dx, c.dy - 6), width: 18, height: 14),
       math.pi,
       math.pi,
       false,
@@ -1867,97 +1771,55 @@ class BeastTokenPainter extends CustomPainter {
     );
 
     final path1 = Path()
-      ..moveTo(c.dx - size.width * 0.10, c.dy + size.height * 0.02)
-      ..quadraticBezierTo(
-        c.dx - size.width * 0.13,
-        c.dy + size.height * 0.15,
-        c.dx - size.width * 0.16,
-        c.dy + size.height * 0.22,
-      );
+      ..moveTo(c.dx - 7, c.dy + 1)
+      ..quadraticBezierTo(c.dx - 10, c.dy + 9, c.dx - 11, c.dy + 16);
 
     final path2 = Path()
-      ..moveTo(c.dx, c.dy + size.height * 0.02)
-      ..quadraticBezierTo(
-        c.dx,
-        c.dy + size.height * 0.15,
-        c.dx,
-        c.dy + size.height * 0.25,
-      );
+      ..moveTo(c.dx, c.dy + 1)
+      ..quadraticBezierTo(c.dx, c.dy + 10, c.dx, c.dy + 18);
 
     final path3 = Path()
-      ..moveTo(c.dx + size.width * 0.10, c.dy + size.height * 0.02)
-      ..quadraticBezierTo(
-        c.dx + size.width * 0.13,
-        c.dy + size.height * 0.15,
-        c.dx + size.width * 0.16,
-        c.dy + size.height * 0.22,
-      );
+      ..moveTo(c.dx + 7, c.dy + 1)
+      ..quadraticBezierTo(c.dx + 10, c.dy + 9, c.dx + 11, c.dy + 16);
 
     canvas.drawPath(path1, line);
     canvas.drawPath(path2, line);
     canvas.drawPath(path3, line);
-  }
-
-  void _drawEyes(Canvas canvas, Size size, Color color) {
-    final c = size.center(Offset.zero);
 
     final eyeGlow = Paint()
-      ..color = color.withOpacity(0.75)
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 5);
-
-    final eyeFill = Paint()..color = Colors.white.withOpacity(0.95);
-
-    switch (unit.type) {
-      case UnitType.brute:
-      case UnitType.striker:
-        final left = c.translate(-size.width * 0.05, -size.height * 0.08);
-        final right = c.translate(size.width * 0.05, -size.height * 0.08);
-        canvas.drawCircle(left, 2.4, eyeGlow);
-        canvas.drawCircle(right, 2.4, eyeGlow);
-        canvas.drawCircle(left, 1.3, eyeFill);
-        canvas.drawCircle(right, 1.3, eyeFill);
-        break;
-      case UnitType.mystic:
-        final top = c.translate(0, -size.height * 0.12);
-        canvas.drawCircle(top, 2.6, eyeGlow);
-        canvas.drawCircle(top, 1.4, eyeFill);
-        break;
-      case UnitType.tentacle:
-        final eye = c.translate(0, -size.height * 0.08);
-        canvas.drawCircle(eye, 2.6, eyeGlow);
-        canvas.drawCircle(eye, 1.4, eyeFill);
-        break;
-    }
+      ..color = Colors.white.withOpacity(0.95)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2);
+    canvas.drawCircle(Offset(c.dx, c.dy - 7), 1.6, eyeGlow);
   }
 
-  void _drawLetter(Canvas canvas, Size size) {
+  void _drawLetter(Canvas canvas, Size size, Offset center) {
     final tp = TextPainter(
       text: TextSpan(
         text: unit.shortLetter,
-        style: const TextStyle(
-          color: Colors.white70,
-          fontSize: 9,
-          fontWeight: FontWeight.bold,
+        style: TextStyle(
+          color: Colors.white.withOpacity(0.72),
+          fontSize: 10,
+          fontWeight: FontWeight.w700,
         ),
       ),
       textDirection: TextDirection.ltr,
     )..layout();
 
-    tp.paint(canvas, Offset(size.width / 2 - tp.width / 2, size.height * 0.60));
+    tp.paint(canvas, Offset(center.dx - tp.width / 2, center.dy + 7));
   }
 
   void _drawHpBar(Canvas canvas, Size size) {
-    final width = size.width * 0.42;
+    final width = 28.0;
     final left = (size.width - width) / 2;
-    final top = size.height * 0.82;
+    final top = size.height - 8;
 
-    final bg = Paint()..color = Colors.black54;
+    final bg = Paint()..color = Colors.white24;
     final fg = Paint()..color = Colors.white.withOpacity(0.95);
 
     canvas.drawRRect(
       RRect.fromRectAndRadius(
-        Rect.fromLTWH(left, top, width, 4),
-        const Radius.circular(2),
+        Rect.fromLTWH(left, top, width, 5),
+        const Radius.circular(3),
       ),
       bg,
     );
@@ -1965,15 +1827,15 @@ class BeastTokenPainter extends CustomPainter {
     final fillWidth = width * (unit.hp / unit.maxHp).clamp(0.0, 1.0);
     canvas.drawRRect(
       RRect.fromRectAndRadius(
-        Rect.fromLTWH(left, top, fillWidth, 4),
-        const Radius.circular(2),
+        Rect.fromLTWH(left, top, fillWidth, 5),
+        const Radius.circular(3),
       ),
       fg,
     );
   }
 
   @override
-  bool shouldRepaint(covariant BeastTokenPainter oldDelegate) {
+  bool shouldRepaint(covariant PremiumTokenPainter oldDelegate) {
     return oldDelegate.unit.type != unit.type ||
         oldDelegate.unit.owner != unit.owner ||
         oldDelegate.unit.hp != unit.hp;
@@ -1989,11 +1851,25 @@ class HoloPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        border: Border.all(color: Colors.cyanAccent),
-        borderRadius: BorderRadius.circular(12),
-        color: Colors.black.withOpacity(0.25),
+        borderRadius: BorderRadius.circular(18),
+        gradient: const LinearGradient(
+          colors: [
+            Color(0xCC07111B),
+            Color(0xCC0A1521),
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        border: Border.all(color: const Color(0xFF58F3FF), width: 1.4),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x3358F3FF),
+            blurRadius: 18,
+            spreadRadius: 1,
+          ),
+        ],
       ),
       child: child,
     );
@@ -2013,17 +1889,23 @@ class HoloIconMiniButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return InkWell(
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: BorderRadius.circular(14),
       onTap: onPressed,
       child: Container(
-        width: 40,
-        height: 40,
+        width: 56,
+        height: 56,
         decoration: BoxDecoration(
-          border: Border.all(color: Colors.cyanAccent),
-          borderRadius: BorderRadius.circular(12),
-          color: Colors.black.withOpacity(0.25),
+          border: Border.all(color: const Color(0xFF58F3FF), width: 1.4),
+          borderRadius: BorderRadius.circular(18),
+          color: Colors.black.withOpacity(0.15),
+          boxShadow: const [
+            BoxShadow(
+              color: Color(0x2258F3FF),
+              blurRadius: 12,
+            ),
+          ],
         ),
-        child: Icon(icon, color: Colors.cyanAccent, size: 20),
+        child: Icon(icon, color: Colors.cyanAccent, size: 28),
       ),
     );
   }
@@ -2034,6 +1916,59 @@ class HoloBackdrop extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(color: Colors.black);
+    return CustomPaint(
+      painter: HoloBackdropPainter(),
+    );
   }
+}
+
+class HoloBackdropPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final rect = Offset.zero & size;
+
+    final bg = Paint()
+      ..shader = const RadialGradient(
+        center: Alignment(0, -0.2),
+        radius: 1.15,
+        colors: [
+          Color(0xFF0A1B28),
+          Color(0xFF050A10),
+          Color(0xFF020406),
+        ],
+      ).createShader(rect);
+
+    canvas.drawRect(rect, bg);
+
+    final starPaint = Paint()..color = Colors.white.withOpacity(0.18);
+    for (int i = 0; i < 120; i++) {
+      final x = ((i * 73) % 1000) / 1000 * size.width;
+      final y = ((i * 181) % 1400) / 1400 * size.height;
+      final r = (i % 3 == 0) ? 1.2 : 0.8;
+      canvas.drawCircle(Offset(x, y), r, starPaint);
+    }
+
+    final cyanGlow = Paint()
+      ..color = const Color(0xFF58F3FF).withOpacity(0.08)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 55);
+
+    final redGlow = Paint()
+      ..color = const Color(0xFFFF5A93).withOpacity(0.05)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 65);
+
+    canvas.drawCircle(Offset(size.width * 0.22, size.height * 0.28), 150, cyanGlow);
+    canvas.drawCircle(Offset(size.width * 0.78, size.height * 0.68), 170, redGlow);
+
+    final gridLine = Paint()
+      ..color = const Color(0xFF58F3FF).withOpacity(0.05)
+      ..strokeWidth = 1;
+
+    for (int i = 0; i < 16; i++) {
+      final y = size.height * i / 16;
+      canvas.drawLine(Offset(0, y), Offset(size.width, y), gridLine);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
