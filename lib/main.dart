@@ -5,7 +5,7 @@ void main() {
   runApp(const HoloApp());
 }
 
-const String gameVersion = 'v0.8.2-tap-fix-full';
+const String gameVersion = 'v0.8.3-pad-match-taps';
 
 class HoloApp extends StatelessWidget {
   const HoloApp({super.key});
@@ -1515,57 +1515,57 @@ class PremiumBoardPainter extends CustomPainter {
         final p = _cellCenter(pos, size);
 
         final padGlow = Paint()
-          ..color = const Color(0xFF63F6FF).withOpacity(0.08)
-          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 10);
-        canvas.drawCircle(p, 22, padGlow);
+          ..color = const Color(0xFF63F6FF).withOpacity(0.09)
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 11);
+        canvas.drawCircle(p, 25, padGlow);
 
         canvas.drawCircle(
           p,
-          15,
+          18,
           Paint()
-            ..color = const Color(0xFFB0FEFF).withOpacity(0.20)
+            ..color = const Color(0xFFB0FEFF).withOpacity(0.23)
             ..style = PaintingStyle.stroke
-            ..strokeWidth = 1.1,
+            ..strokeWidth = 1.2,
         );
 
         if (selected == pos) {
           final glow = Paint()
-            ..color = const Color(0xFF63F6FF).withOpacity(0.35)
-            ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 12);
-          canvas.drawCircle(p, 33, glow);
+            ..color = const Color(0xFF63F6FF).withOpacity(0.38)
+            ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 13);
+          canvas.drawCircle(p, 36, glow);
           canvas.drawCircle(
             p,
-            30,
+            33,
             Paint()
               ..color = const Color(0xFF63F6FF)
               ..style = PaintingStyle.stroke
-              ..strokeWidth = 2.5,
+              ..strokeWidth = 2.7,
           );
         } else if (moves.contains(pos)) {
           final glow = Paint()
-            ..color = const Color(0xFFFFD46A).withOpacity(0.18)
-            ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 10);
-          canvas.drawCircle(p, 30, glow);
+            ..color = const Color(0xFFFFD46A).withOpacity(0.22)
+            ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 11);
+          canvas.drawCircle(p, 34, glow);
           canvas.drawCircle(
             p,
-            27,
+            31,
             Paint()
               ..color = const Color(0xFFFFD46A)
               ..style = PaintingStyle.stroke
-              ..strokeWidth = 2.1,
+              ..strokeWidth = 2.3,
           );
         } else if (targets.contains(pos)) {
           final glow = Paint()
-            ..color = const Color(0xFFFF5C98).withOpacity(0.20)
-            ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 10);
-          canvas.drawCircle(p, 30, glow);
+            ..color = const Color(0xFFFF5C98).withOpacity(0.24)
+            ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 11);
+          canvas.drawCircle(p, 34, glow);
           canvas.drawCircle(
             p,
-            27,
+            31,
             Paint()
               ..color = const Color(0xFFFF5C98)
               ..style = PaintingStyle.stroke
-              ..strokeWidth = 2.1,
+              ..strokeWidth = 2.3,
           );
         }
       }
